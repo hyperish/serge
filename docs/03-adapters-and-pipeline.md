@@ -14,11 +14,13 @@
 3. **SSR & 스트리밍 Hydration (`lace-ssr`)**:
    - 서버(`ring`과 결합 시)에서는 비동기 리소스(`Suspense`)가 준비되는 대로 HTML 청크와 직렬화된 상태(`hyper-serde`)를 스트리밍하고, 클라이언트는 이미 렌더된 DOM에 이벤트와 시그널만 복원(Hydration)합니다.
 
-## 2. 호환 어댑터 구성
+## 2. 호환 어댑터 및 외부 계층 접점
 
-| 어댑터 | 연결 대상 | 역할 및 준수 계약 |
+| 구성 / 어댑터 | 연결 대상 | 역할 및 준수 계약 |
 |---|---|---|
-| **`lace-adapter-dom`** | 브라우저 표준 DOM / Web API | WASM ↔ JS 경계 호출을 배치화하거나 최소화하고, Canvas / WebGPU 서피스를 `lace` 컴포넌트 트리 안에 안전하게 마운트 |
-| **`lace-adapter-ring`** | `ring` 백엔드 / 외부 API | `hyper-api` 계약을 통해 내부 고성능 코덱 또는 외부 호환 규약(`hyperish/docs` `03-api-protocol.md` HTTP/JSON, `04-realtime-communication.md` WS/WT)으로 통신. 라우트 전환 시 이전 요청에 구조적 취소 신호 전파 |
-| **`lace-ionic`** | 크로스플랫폼 웹 UI | Ionic을 레퍼런스로 한 적응형(iOS/Android/데스크톱 감각) 웹 UI 프리미티브, 네비게이션 스택, 터치 제스처 어댑터 |
-| **`lace-adapter-webview`** | 네이티브 웹뷰 컨테이너 (`hera` 연동 등) | `hera`는 자체적으로 웹뷰를 절대 쓰지 않으므로, 웹 콘텐츠나 하이브리드 화면이 필요한 응용에서 **`lace` 앱을 네이티브 웹뷰 안에 띄우고 `hyper-serde` 기반 IPC로 `hera`/OS와 통신하는 전용 호환 어댑터** |
+| **`lace-dom`** | 브라우저 표준 DOM / Web API | 모든 DOM 요소·속성·이벤트·Web API를 `hyper`/`lace` 타입으로 표현하고, WASM ↔ JS 경계 호출을 최소화해 실제 DOM으로 출력 |
+| **`lace-dev`** | 로컬 개발 프리뷰 (`hyper preview`) | 최소 **CRA(Create React App) 수준**의 자체 데브 서버·WASM 번들링·HMR 제공. 프로덕션 백엔드(`ring`) 없이도 `lace` 단독 개발·미리보기 완결 |
+| **`lace-ionic`** | 크로스플랫폼 웹 UI | Ionic을 레퍼런스로 한 적응형(모바일/데스크톱 감각) 웹 UI 컴포넌트, 네비게이션 스택, 터치 제스처 |
+| **`lace-adapter-client`** | 원격 API (`ring` 등) | 브라우저 `fetch` / `WebSocket` / `WebTransport` 위에서 `hyper-api` 계약을 실행하는 클라이언트 어댑터 |
+| **프로덕션 서빙 접점 (`ring` 소유)** | `ring::ring-adapter-lace` | `lace`가 생성한 웹 번들 및 `lace-ssr` 렌더 함수를 받아 프로덕션에서 서빙하는 역할은 `ring`이 담당 |
+| **네이티브 웹뷰 접점 (`hera` 소유)** | `hera::hera-adapter-lace-webview` | 네이티브 앱에서 웹뷰가 필요할 때 `lace`가 만든 DOM 출력물을 받아 웹뷰로 띄우는 어댑터는 `hera`가 담당 |
