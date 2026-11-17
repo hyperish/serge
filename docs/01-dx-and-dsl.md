@@ -1,14 +1,16 @@
 # 01. DX 및 DSL 설계 (lace)
 
-> 상태: Dioxus `rsx!` DX 및 Leptos 파이프라인 결합 방향은 **확정**, 구체 문법은 **제안/미정** · 기준일: 2026-11-17
+> 상태: `hera`와의 공통 UI 문법(QML/Slint + Dioxus `rsx!` + GPUI 빌더 병행)·Leptos 파이프라인·CRA급 데브 서버 내장은 **확정**, 세부 문법은 **제안/미정** · 기준일: 2026-11-17
 
-`lace`는 **겉으로 쓰는 개발자 경험(DX)은 Dioxus의 `rsx!`처럼 간결하고 읽기 쉽게**, **컴파일 뒤 돌아가는 실행 파이프라인은 Leptos처럼 세밀한(fine-grained) 반응형 DOM 업데이트와 스트리밍 SSR로 빠르게** 동작하도록 설계합니다.
+`lace`는 **모든 DOM 기능을 [`hera`](https://github.com/hyperish/hera)와 동일한 UI 문법(QML/Slint + Dioxus `rsx!` 스타일, 또는 GPUI식 순수 Rust 빌더)으로 쉽게 표현**하고, **뒤에서는 Leptos처럼 세밀한(fine-grained) 반응형 DOM 업데이트로 빠르게 DOM을 출력**하도록 설계합니다.
 
-## 1. 뷰 & 컴포넌트 DSL 원칙
+## 1. 공통 UI 문법 & DOM 특화 확장 원칙
 
-- **Dioxus `rsx!` 감각의 선언적 문법**: 닫는 태그 소음 없이 들여쓰기와 블록으로 구조를 표현하고, 속성·이벤트 핸들러·조건/반복문을 Rust 표현식으로 자연스럽게 작성합니다.
-- **Leptos식 세밀한 반응성 컴파일**: proc macro(`rsx!`)가 컴파일 타임에 정적 템플릿(`<template>`)과 동적 바인딩 지점을 분리해, 런타임에는 변경된 `hyper-state` 시그널이 가리키는 텍스트/속성만 수술적으로 갱신합니다.
-- **컴파일 타임 HTML/ARIA/타입 검증**: 오타 난 태그·속성명, 잘못된 이벤트 핸들러 시그니처, SSR 경계를 넘을 수 없는 비직렬화 타입을 컴파일 타임 진단 메시지로 즉시 알립니다.
+- **`hera`와 동일한 기본 UI 문법 공유**: 컴포넌트, 프로퍼티 바인딩, 반응형 시그널(`hyper-state`), 조건·반복 구조는 `hera`(네이티브)와 완전히 같은 문법을 씁니다. 거기에 DOM/웹 전용 기능(시맨틱 태그, CSS/클래스, History/Storage/DOM 이벤트 등)이 들어가면 `lace`가 DOM 타깃으로 컴파일합니다.
+- **QML/Slint 선언적 문법 + GPUI식 Rust 빌더 동등 지원**:
+  - 복잡한 뷰 계층과 프로퍼티 바인딩은 QML/Slint 및 Dioxus `rsx!` 감각의 매크로로 깔끔하게 작성합니다.
+  - GPUI처럼 매크로 DSL 없이 순수 Rust 메서드 체이닝만으로도 가독성이 좋은 경우에는 DSL 없이 바로 DOM 트리를 구축할 수 있습니다.
+- **Leptos식 세밀한 반응성 컴파일**: 컴파일 타임에 정적 DOM `<template>`과 동적 시그널 바인딩 지점을 분리해, 런타임에는 변경된 `hyper-state` 시그널이 가리키는 DOM 텍스트/속성만 수술적으로 갱신합니다.
 
 ### 개념 스케치 (제안 — 구체 문법은 미정)
 
@@ -18,32 +20,37 @@ use lace::prelude::*;
 
 #[lace::component]
 pub fn ProjectCard(project_id: Id<Project>) -> Element {
-    let mut liked = use_signal(|| false);
-    let project = use_resource(move || ProjectService::get_project(project_id));
+    let liked = use_signal(|| false);
 
-    rsx! {
-        IonCard { class: "project-card",
-            match project.read().as_ref() {
-                Some(Ok(item)) => rsx! {
-                    h2 { "{item.title}" }
-                    button {
-                        onclick: move |_| liked.toggle(),
-                        if liked() { "좋아요 취소" } else { "좋아요" }
-                    }
-                },
-                Some(Err(err)) => rsx! { ErrorBanner { error: err.clone() } },
-                None => rsx! { SkeletonCard {} },
+    // 1) QML/Slint + Dioxus 감각의 선언적 문법 (hera와 동일 문법 + 웹/Ionic 요소)
+    ui! {
+        IonCard {
+            class: "project-card",
+            padding: 16px,
+            Button {
+                text: if liked() { "좋아요 취소" } else { "좋아요" },
+                clicked => { liked.toggle(); }
             }
         }
     }
 }
+
+// 2) DSL 없이 GPUI 스타일 순수 Rust 빌더로 동일하게 DOM 구축 가능
+pub fn project_badge(label: &str) -> Element {
+    div()
+        .class("badge")
+        .attr("role", "status")
+        .child(span().text(label))
+        .into_element()
+}
 ```
 
-> 위 코드 블록은 Dioxus `rsx!` + Leptos 반응성 + Ionic형 컴포넌트 결합 시의 DX를 보여주는 스케치이며, 세부 문법은 [`04-open-questions.md`](04-open-questions.md)에서 확정합니다.
+> 위 코드 블록은 QML/Slint·Dioxus 선언적 문법과 GPUI식 순수 Rust DOM 빌더의 병행을 보여주는 스케치이며, 세부 문법은 [`04-open-questions.md`](04-open-questions.md)에서 확정합니다.
 
-## 2. `hyper` CLI와 통합된 웹 개발 흐름
+## 2. 최소 CRA 수준의 자체 로컬 프리뷰·데브 서빙
 
-- **`hyper init --template lace-web`**: WASM 타깃 설정이나 번들러 설정을 직접 만질 필요 없이 즉시 동작하는 웹 앱 템플릿 생성.
-- **`hyper preview`**: 시그널 상태를 유지한 채 `rsx!` 마크업과 스타일 변경을 브라우저에 즉시 핫리로드.
-- **`hyper lint`**: 웹 접근성(a11y), Hydration 불일치 위험 코드, 불필요한 클로저 재할당 진단.
-- **`hyper test`**: 헤드리스 브라우저 및 SSR 스냅샷·반응성 그래프 단위 테스트 통합 실행.
+프로덕션 서빙은 `ring`이, 네이티브 웹뷰 호스팅은 `hera`가 담당하지만, **웹 프론트엔드 단독 개발 경험은 `lace` 자체만으로 완결**되어야 합니다:
+
+- **내장 데브 서버 (`lace-dev` / `hyper preview`)**: CRA(Create React App)나 Vite처럼 `ring` 백엔드 없이도 즉시 로컬 개발 서버를 띄워 WASM/JS 번들링, 정적 에셋 서빙, SPA 라우팅 폴백, HMR(상태 보존 핫리로드)을 수행합니다.
+- **`hyper init --template lace-web`**: 설정 파일 씨름 없이 바로 브라우저에서 열리는 스타터 생성.
+- **`hyper lint` & `hyper test`**: DOM 접근성(a11y)·Hydration 검증 및 헤드리스 DOM 테스트 실행.
