@@ -34,9 +34,9 @@ lace/
                [ hyper (core / state / parser / serde / api) ]
 ```
 
-- **반응성 코어 및 UI 문법 공유 (`hyper-state`, `hyper-parser`)**: `lace`가 독자적인 시그널이나 별도 UI 문법 파서를 따로 만들지 않고 `hyper` 코어를 그대로 참조(`ref`)하여, `hera`(네이티브)와 동일한 UI 문법을 유지하면서 출력만 DOM으로 내보냅니다.
+- **반응성 코어 및 UI 문법 공유 (`hyper-state`, `hyper-parser`)**: `lace`가 독자적인 시그널이나 별도 UI 문법 파서를 따로 만들지 않고 `hyper` 코어를 그대로 참조(`ref`)하여, `glint`(네이티브)와 동일한 UI 문법을 유지하면서 출력만 DOM으로 내보냅니다.
 - **서빙 및 웹뷰 역할 분리**:
   - 로컬 개발 시의 간편한 프리뷰/데브 서빙은 `lace-dev`가 책임집니다.
-  - 프로덕션 서빙은 `ring`(`ring-adapter-lace`), 네이티브 웹뷰 호스팅은 `hera`(`hera-adapter-lace-webview`)가 `lace`의 DOM 출력물을 가져가 처리합니다.
+  - 프로덕션 서빙은 `ring`(`ring-adapter-lace`), 네이티브 웹뷰 호스팅은 `glint`(`glint-adapter-lace-webview`)가 `lace`의 DOM 출력물을 가져가 처리합니다.
 - **내부 포크 + 단계적 `unit optimization`**:
   - Leptos의 템플릿/DOM 패칭 기법과 Dioxus/Slint 계열 매크로 구조를 레퍼런스·포크 대상으로 삼아, (1단계) 불필요한 추상화를 제거해 `hyper-state`에 직결하고, (2단계) 핫패스에 대해 심화 개조를 수행합니다(`hyperish/docs` `05-development-rules.md` §7).
