@@ -51,5 +51,4 @@ lace/
 - **단일 반응성 및 UI 문법 (`hyper-state`, `hyper-parser`)**: 웹 타깃과 네이티브 타깃이 모두 `hyper-state`와 `lace-core` 뷰 트리를 공유하므로, 컴포넌트와 비즈니스 상태 로직을 두 번 작성하지 않습니다.
 - **네이티브 GPU & CPU 백엔드의 대칭성**: 네이티브 타깃에서는 `lace-core`가 플랫폼 중립 `ScenePrimitive` 리스트를 생성하고, `lace-native-gpu`와 `lace-native-cpu`(필수 폴백)가 동일한 프리미티브를 소비해 렌더링합니다.
 - **네이티브 WebView 격리 보장**: `lace-native-*`와 `lace-platform-*` 기본 트리에는 어떠한 WebView 의존성도 링크되지 않습니다. 웹뷰가 꼭 필요한 응용에서만 같은 레포 내의 옵트인 어댑터(`lace-adapter-webview`)를 켜서 `lace-web-dom` 출력물을 웹뷰 서피스로 마운트합니다.
-- **내부 포크 + 단계적 `unit optimization`**:
-  - 웹 DOM 패칭(Leptos `tachys` 계열), 네이티브 GPU/CPU 렌더링·레이아웃·텍스트(GPUI / `taffy` / `cosmic-text` / `tiny-skia` 계열) 등 검증된 크레이트를 포크해 (1단계) 불필요한 추상화를 제거하고 `hyper` 코어에 직결하며, (2단계) 프로파일링 병목 구간에 메모리 레이아웃·SIMD 심화 개조를 수행합니다(`hyperish/docs` `05-development-rules.md` §7).
+- **내부 포크 및 `unit optimization`**: 웹 DOM 패칭 및 네이티브 GPU/CPU·레이아웃·텍스트 포크 크레이트의 최적화 절차는 `hyperish/docs`의 `05-development-rules.md` §7을 따릅니다.
