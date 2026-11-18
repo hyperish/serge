@@ -12,27 +12,28 @@ lace/
     lace-playground/          # 웹(DOM) 및 네이티브(GPU/CPU) 통합 컴포넌트·120fps 쇼케이스 앱
   crates/
     lace/                     # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
-    lace-core/                # 타깃 중립 뷰 트리, 컴포넌트 수명주기, 이벤트·포커스, PaintCtx/ScenePrimitive 계약
-    lace-macros/              # 공통 UI 문법(QML/Slint + Dioxus rsx! 스타일) proc macro (hyper-parser 참조)
-    lace-layout/              # 웹·네이티브 공용 고속 레이아웃(Flexbox/Grid/절대배치) 및 스타일 계산 엔진
-    lace-router/              # 웹(History API) 및 네이티브(네비게이션 스택) 공용 타입 안전 라우터
+    lace-core/                # 뷰 트리, 폼(`hyper-validate`), Suspense/ErrorBoundary/낙관적 UI, 테마·i18n, PaintCtx/ScenePrimitive
+    lace-macros/              # 공통 UI 문법(QML/Slint + Dioxus rsx! 스타일 `ui!`) proc macro (hyper-parser 참조)
+    lace-layout/              # 웹·네이티브 공용 고속 레이아웃(Flexbox/Grid/절대배치) 및 스타일·토큰 계산 엔진
+    lace-router/              # 웹(History API) 및 네이티브(네비게이션 스택) 공용 타입 안전 라우터·중첩 레이아웃·가드
 
     # --- Web (DOM) 타깃 크레이트 ---
-    lace-web-dom/             # 모든 DOM/웹 기능 빌더 + Leptos식 템플릿 복제(`cloneNode`)·수술적 패칭 엔진
-    lace-web-ssr/             # 스트리밍 HTML SSR 렌더러 및 Hydration 마커 출력 (`ring` 서빙 연동용)
+    lace-web-dom/             # 모든 DOM/웹 기능 빌더 + Leptos식 템플릿 복제·수술적 패칭 + `persistent_signal`·오프라인 큐·a11y
+    lace-web-ssr/             # 스트리밍 HTML SSR·정적 사이트 생성(SSG)·`<Title>`/`<Meta>` Head 수집 (`ring` 서빙 연동용)
     lace-web-ionic/           # Ionic 레퍼런스 기반 적응형 웹 UI 컴포넌트·제스처·트랜지션
     lace-web-dev/             # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyper preview` 연동)
 
     # --- Native (GPU + 필수 CPU 폴백) 타깃 크레이트 ---
-    lace-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프 인스턴싱 패스)
+    lace-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프·ExternalTexture 제로카피 합성)
     lace-native-cpu/          # 필수 CPU 소프트웨어 폴백 렌더 백엔드 (동일 ScenePrimitive 소비)
     lace-native-text/         # 네이티브 폰트 탐색, 텍스트 셰이핑, 줄바꿈, 서브픽셀/SDF 글리프 아틀라스
-    lace-platform-desktop/    # macOS(Cocoa/Metal), Windows(Win32/DX12·Vulkan), Linux(Wayland/X11) 어댑터
-    lace-platform-ios/        # iOS UIKit/Metal·CADisplayLink·멀티터치·Safe Area·IME 어댑터
-    lace-platform-android/    # Android NativeWindow·Choreographer·Vulkan/GLES·터치·IME 어댑터
+    lace-native-sys/          # 크로스플랫폼 네이티브 SDK (파일 다이얼로그·드래그앤드롭·클립보드·공유 시트·Keychain·알림·딥링크·AccessKit 접근성)
+    lace-platform-desktop/    # macOS, Windows, Linux 멀티 윈도우·네이티브 메뉴바·시스템 트레이·단축키·VSync·IME 어댑터
+    lace-platform-ios/        # iOS UIKit/Metal·CADisplayLink·Safe Area·키보드 회피·멀티터치·햅틱·수명주기 어댑터
+    lace-platform-android/    # Android NativeWindow·Choreographer·Vulkan/GLES·Safe Area·키보드 회피·백 제스처·햅틱 어댑터
 
     # --- 공용 통신 및 옵트인 웹뷰 어댑터 ---
-    lace-adapter-client/      # 웹/네이티브 공용 `hyper-api` 원격 통신 어댑터 (`ring` 연동)
+    lace-adapter-client/      # 웹/네이티브 공용 Dual-Rail(`hyper-serde`+WebTransport / HTTP+WS) 및 인라인 서버 함수 클라이언트
     lace-adapter-webview/     # [옵트인 전용] 네이티브 창 일부에 `lace-web-dom` 출력물을 웹뷰 서피스로 띄울 때만 사용
 ```
 
