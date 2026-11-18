@@ -62,6 +62,35 @@ pub fn ProjectEditorCard(
         }
     }
 }
+
+// 3) 로컬 엔진 공유 메모리 Ring Buffer(`SharedRingBuf`) & iOS Dynamic Island(`#[ios::live_activity]`) 활용
+#[component]
+pub fn RealtimeTelemetry(ring_buf: SharedRingBuf<FrameMetrics>) -> Element {
+    ui! {
+        Canvas {
+            height: 80px,
+            on_paint: move |bounds, ctx: &mut PaintCtx| {
+                // 인프로세스든 로컬 데몬(Shm IPC)이든 직렬화·락·복사 없이 최신 슬라이스를 바로 드로잉
+                let samples = ring_buf.read_latest(128);
+                ctx.draw_sparkline(bounds, samples);
+            }
+        }
+    }
+}
+
+#[ios::live_activity]
+pub fn ExportIsland(state: ExportStatus) -> LiveActivity {
+    live_activity! {
+        compact_leading: ui! { Icon { "cube" } },
+        compact_trailing: ui! { Label { "{(state.progress * 100.0) as u32}%" } },
+        expanded: ui! {
+            Stack { gap: 8px,
+                Label { "{state.project_name} 내보내는 중..." }
+                ProgressBar { value: state.progress }
+            }
+        }
+    }
+}
 ```
 
 > 위 코드 블록은 체이닝 조립(`component()`)과 고정된 뷰 매크로(`ui!`)의 역할 분리를 보여주는 스케치이며, 세부 키워드는 [`04-open-questions.md`](04-open-questions.md)에서 확정합니다.
