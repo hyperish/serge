@@ -26,7 +26,7 @@
 
 | 축 | 레퍼런스 / 전략 | 채용 이유 |
 |---|---|---|
-| **공통 UI 문법 & 빌더 DX** | **QML/Slint, Dioxus (`rsx!`), GPUI (Rust 빌더)** | QML/Slint의 깔끔한 계층·바인딩 가독성 + Dioxus `rsx!`의 표현력 + GPUI식 DSL 없는 순수 Rust 빌더를 결합해 생산성이 높은 방식이면 무엇이든 허용 |
+| **공통 UI 뷰 DSL** | **QML/Slint & Dioxus (`rsx!`) proc macro 고정** | 깊은 뷰 트리 가독성, 컴파일 타임 정적 템플릿 분리 최적화, 즉시 핫리로드를 위해 뷰 마크업은 proc macro DSL로 고정 (도메인/라우트 조립만 Rust 체이닝 사용) |
 | **Web 렌더링 파이프라인** | **Leptos** | 가상 DOM 비교 없이 신호(signal) 변경이 필요한 DOM 노드만 직접 갱신하는 세밀한(fine-grained) DOM 파이프라인 및 스트리밍 SSR/Hydration |
 | **Web 적응형 UI** | **Ionic** | 모바일·데스크톱 적응형 웹 컴포넌트 및 인터랙션 경험 |
 | **Native 렌더링·UI 엔진** | **GPUI (Zed) & `anomalyco/rune`** | 120fps급 즉시 반응성, GPU 배칭 렌더 패스(+ 필수 CPU 폴백), 하이브리드 즉시/보존 모드 레이아웃·페인트 구조 |
