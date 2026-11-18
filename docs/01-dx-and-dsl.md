@@ -20,10 +20,21 @@
 use hyper::prelude::*;
 use lace::prelude::*;
 
-// 1) QML/Slint + Dioxus 감각의 선언적 문법 (Web DOM과 Native GPU/CPU 양쪽에서 동일하게 동작)
-#[lace::component]
-pub fn InspectorCard(exposure: Signal<f32>) -> Element {
-    let liked = use_signal(|| false);
+// 1) 도메인/기능 단위 컴포넌트 조립 (`ring` 백엔드 컴포넌트와 동일한 Rust 조립 감각)
+pub fn project_feature() -> UiComponent {
+    component()
+        .provide(|| ProjectDraftStore { title: signal(String::new()) })
+        .wrap(RequireAuth::redirect("/login"))
+        .route("/projects", ProjectEditorCard)
+}
+
+// 2) QML/Slint + Dioxus 감각의 선언적 뷰 컴포넌트 (Web DOM & Native GPU/CPU 공통)
+#[component]
+pub fn ProjectEditorCard(
+    store: Ctx<ProjectDraftStore>,
+    exposure: Signal<f32>,
+) -> Element {
+    let mut liked = signal(false);
 
     ui! {
         Card {
@@ -44,7 +55,7 @@ pub fn InspectorCard(exposure: Signal<f32>) -> Element {
     }
 }
 
-// 2) GPUI처럼 DSL 없이도 가독성이 좋은 순수 Rust 빌더 체이닝 (웹·네이티브 동등 지원)
+// 3) GPUI처럼 DSL 없이도 가독성이 좋은 순수 Rust 빌더 체이닝 (웹·네이티브 동등 지원)
 pub fn custom_panel(exposure: f32) -> impl IntoElement {
     view()
         .v_stack()
