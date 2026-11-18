@@ -25,9 +25,10 @@
 |---|---|---|
 | **Web DOM & 적응형 UI** | `lace-web-dom`, `lace-web-ionic` | 모든 DOM/Web API 표현·출력 및 Ionic 레퍼런스 기반 모바일·데스크톱 적응형 웹 컴포넌트 |
 | **Web 로컬 데브 서버** | `lace-web-dev` (`hyper preview`) | 최소 **CRA(Create React App) 수준**의 내장 데브 서버·WASM 번들링·상태 보존 HMR |
-| **Native 데스크톱 어댑터** | `lace-platform-desktop` | macOS(Cocoa/Metal), Windows(Win32/DX12·Vulkan), Linux(Wayland/X11) 창·입력·VSync·IME·클립보드 연동 |
-| **Native iOS / Android 어댑터** | `lace-platform-ios`, `lace-platform-android` | `CADisplayLink`/`Choreographer` 프레임 동기화, Metal/Vulkan/GLES 및 CPU 버퍼 프레젠테이션, 멀티터치·Safe Area·모바일 IME 연동 |
-| **원격 API 어댑터** | `lace-adapter-client` | 웹(`fetch`/WS/WT)과 네이티브(네이티브 소켓/HTTP/QUIC) 양쪽에서 동일한 `hyper-api` 계약을 실행하고 뷰 언마운트 시 구조적 취소 신호 전파 |
+| **Native 데스크톱 어댑터** | `lace-platform-desktop` | macOS/Windows/Linux 멀티 윈도우·네이티브 메뉴바/MenuBarExtra·트레이·단축키·VSync·IME·독/작업표시줄 진행률 연동 |
+| **Native iOS / Android 어댑터** | `lace-platform-ios`, `lace-platform-android` | `CADisplayLink`/`Choreographer` 프레임 동기화, Safe Area·키보드 회피, **iOS Dynamic Island / Live Activities(`#[ios::live_activity]`)**·WidgetKit, Android Ongoing Live Notification·PiP·폴더블 힌지(Posture) 연동 |
+| **Native HW · SW · Alert SDK** | `lace-native-sys` | `lace::hw`(센서 링 버퍼/시그널, 카메라 `ExternalTexture` 제로카피, 마이크 링 버퍼, 생체인증, 펜슬/햅틱, BLE) 및 `lace::sys`(OS 네이티브 Alert/ActionSheet/권한 팝업, 파일 피커, Keychain, 공유 시트, 백그라운드 태스크, `AccessKit` 접근성) |
+| **3-Tier 통신 어댑터** | `lace-adapter-client` | ① **Tier 1 인프로세스**(`SyncSignal` + Lock-Free `SharedRingBuf`), ② **Tier 2 로컬 IPC**(OS `shm`/`mmap` Shared Ring Buffer + Unix Socket/Named Pipe `hyper-serde` 바이너리 RPC), ③ **Tier 3 원격 서버**(Dual-Rail `hyper-serde`+WebTransport / HTTP+WS) 통합 실행 및 뷰 언마운트 시 구조적 취소 전파 |
 | **옵트인 웹뷰 어댑터** | `lace-adapter-webview` | 네이티브 UI는 기본적으로 웹뷰를 절대 쓰지 않으나, 네이티브 앱 일부 슬롯에 웹 화면을 띄워야 할 때 **같은 레포의 `lace-web-dom` 산출물을 네이티브 웹뷰 서피스로 마운트하고 `hyper-serde` IPC로 상태를 동기화하는 내부 옵트인 어댑터** |
 | **프로덕션 웹 서빙 접점** | `ring::ring-adapter-lace` | `lace` 웹 타깃의 프로덕션 서빙 및 SSR 호스팅은 `ring`이 담당 (§3 참조) |
 
