@@ -1,42 +1,55 @@
 # 02. 아키텍처와 크레이트 구조 (lace)
 
-> 상태: `apps/`·`crates/` 모노레포 및 `hyper` 코어 `ref` 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-17
+> 상태: `apps/`·`crates/` 모노레포·`hyper` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-18
 
-`lace` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1).
+`lace` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1). 하나의 공통 UI 코어 위에 **Web(DOM/SSR) 렌더 타깃**과 **Native(GPU/CPU) 렌더 타깃**이 대칭으로 올라갑니다.
 
 ## 1. 워크스페이스 디렉터리 구조 (제안)
 
 ```
 lace/
   apps/
-    lace-playground/        # 컴포넌트·반응성·DOM 출력 파이프라인 검증 및 쇼케이스 앱
+    lace-playground/          # 웹(DOM) 및 네이티브(GPU/CPU) 통합 컴포넌트·120fps 쇼케이스 앱
   crates/
-    lace/                   # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
-    lace-core/              # 뷰 노드·템플릿 표현, 마운트 수명주기, 컨텍스트, 서스펜스/리소스
-    lace-macros/            # 공통 UI 문법(`hyper-parser`)의 웹/DOM 타깃 전개 proc macro
-    lace-dom/               # 모든 DOM/웹 기능 빌더 + 템플릿 복제(`cloneNode`)·수술적 패칭·이벤트 위임 엔진
-    lace-ssr/               # 정적/스트리밍 HTML 문자열 생성 및 Hydration 마커 출력 (`ring` 서빙 연동용)
-    lace-router/            # 타입 안전 URL 라우터 (History API 바인딩 및 네비게이션 취소 토큰 연동)
-    lace-ionic/             # Ionic 레퍼런스 기반 적응형 웹 UI 컴포넌트·제스처·트랜지션 시스템
-    lace-dev/               # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyper preview` 연동)
-    lace-adapter-client/    # 브라우저 측 `hyper-api` 통신 어댑터 (fetch / WebSocket / WebTransport)
+    lace/                     # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
+    lace-core/                # 타깃 중립 뷰 트리, 컴포넌트 수명주기, 이벤트·포커스, PaintCtx/ScenePrimitive 계약
+    lace-macros/              # 공통 UI 문법(QML/Slint + Dioxus rsx! 스타일) proc macro (hyper-parser 참조)
+    lace-layout/              # 웹·네이티브 공용 고속 레이아웃(Flexbox/Grid/절대배치) 및 스타일 계산 엔진
+    lace-router/              # 웹(History API) 및 네이티브(네비게이션 스택) 공용 타입 안전 라우터
+
+    # --- Web (DOM) 타깃 크레이트 ---
+    lace-web-dom/             # 모든 DOM/웹 기능 빌더 + Leptos식 템플릿 복제(`cloneNode`)·수술적 패칭 엔진
+    lace-web-ssr/             # 스트리밍 HTML SSR 렌더러 및 Hydration 마커 출력 (`ring` 서빙 연동용)
+    lace-web-ionic/           # Ionic 레퍼런스 기반 적응형 웹 UI 컴포넌트·제스처·트랜지션
+    lace-web-dev/             # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyper preview` 연동)
+
+    # --- Native (GPU + 필수 CPU 폴백) 타깃 크레이트 ---
+    lace-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프 인스턴싱 패스)
+    lace-native-cpu/          # 필수 CPU 소프트웨어 폴백 렌더 백엔드 (동일 ScenePrimitive 소비)
+    lace-native-text/         # 네이티브 폰트 탐색, 텍스트 셰이핑, 줄바꿈, 서브픽셀/SDF 글리프 아틀라스
+    lace-platform-desktop/    # macOS(Cocoa/Metal), Windows(Win32/DX12·Vulkan), Linux(Wayland/X11) 어댑터
+    lace-platform-ios/        # iOS UIKit/Metal·CADisplayLink·멀티터치·Safe Area·IME 어댑터
+    lace-platform-android/    # Android NativeWindow·Choreographer·Vulkan/GLES·터치·IME 어댑터
+
+    # --- 공용 통신 및 옵트인 웹뷰 어댑터 ---
+    lace-adapter-client/      # 웹/네이티브 공용 `hyper-api` 원격 통신 어댑터 (`ring` 연동)
+    lace-adapter-webview/     # [옵트인 전용] 네이티브 창 일부에 `lace-web-dom` 출력물을 웹뷰 서피스로 띄울 때만 사용
 ```
 
 ## 2. 계층 의존 방향과 `hyper` 코어(`ref`) 수직화
 
 ```
-[ lace-dom / lace-ssr / lace-ionic / lace-dev / lace-adapter-client ]
-                                  │
-                                  ▼ (단방향 의존)
-                      [ lace-core / lace-macros ]
-                                  │
-                                  ▼ (코어 ref)
-               [ hyper (core / state / parser / serde / api) ]
+  [ Web 타깃: lace-web-{dom,ssr,ionic,dev} ]    [ Native 타깃: lace-native-{gpu,cpu,text} + lace-platform-* ]
+                       \                                              /
+                        ▼                                            ▼
+                   [ lace-core / lace-layout / lace-router / lace-macros ]
+                                             │
+                                             ▼ (코어 ref)
+                       [ hyper (core / state / parser / serde / api) ]
 ```
 
-- **반응성 코어 및 UI 문법 공유 (`hyper-state`, `hyper-parser`)**: `lace`가 독자적인 시그널이나 별도 UI 문법 파서를 따로 만들지 않고 `hyper` 코어를 그대로 참조(`ref`)하여, `glint`(네이티브)와 동일한 UI 문법을 유지하면서 출력만 DOM으로 내보냅니다.
-- **서빙 및 웹뷰 역할 분리**:
-  - 로컬 개발 시의 간편한 프리뷰/데브 서빙은 `lace-dev`가 책임집니다.
-  - 프로덕션 서빙은 `ring`(`ring-adapter-lace`), 네이티브 웹뷰 호스팅은 `glint`(`glint-adapter-lace-webview`)가 `lace`의 DOM 출력물을 가져가 처리합니다.
+- **단일 반응성 및 UI 문법 (`hyper-state`, `hyper-parser`)**: 웹 타깃과 네이티브 타깃이 모두 `hyper-state`와 `lace-core` 뷰 트리를 공유하므로, 컴포넌트와 비즈니스 상태 로직을 두 번 작성하지 않습니다.
+- **네이티브 GPU & CPU 백엔드의 대칭성**: 네이티브 타깃에서는 `lace-core`가 플랫폼 중립 `ScenePrimitive` 리스트를 생성하고, `lace-native-gpu`와 `lace-native-cpu`(필수 폴백)가 동일한 프리미티브를 소비해 렌더링합니다.
+- **네이티브 WebView 격리 보장**: `lace-native-*`와 `lace-platform-*` 기본 트리에는 어떠한 WebView 의존성도 링크되지 않습니다. 웹뷰가 꼭 필요한 응용에서만 같은 레포 내의 옵트인 어댑터(`lace-adapter-webview`)를 켜서 `lace-web-dom` 출력물을 웹뷰 서피스로 마운트합니다.
 - **내부 포크 + 단계적 `unit optimization`**:
-  - Leptos의 템플릿/DOM 패칭 기법과 Dioxus/Slint 계열 매크로 구조를 레퍼런스·포크 대상으로 삼아, (1단계) 불필요한 추상화를 제거해 `hyper-state`에 직결하고, (2단계) 핫패스에 대해 심화 개조를 수행합니다(`hyperish/docs` `05-development-rules.md` §7).
+  - 웹 DOM 패칭(Leptos `tachys` 계열), 네이티브 GPU/CPU 렌더링·레이아웃·텍스트(GPUI / `taffy` / `cosmic-text` / `tiny-skia` 계열) 등 검증된 크레이트를 포크해 (1단계) 불필요한 추상화를 제거하고 `hyper` 코어에 직결하며, (2단계) 프로파일링 병목 구간에 메모리 레이아웃·SIMD 심화 개조를 수행합니다(`hyperish/docs` `05-development-rules.md` §7).
