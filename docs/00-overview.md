@@ -19,9 +19,12 @@
    - `localStorage`/`IndexedDB`와 동기화되는 **영속 시그널(`persistent_signal`)**, 오프라인 편집 큐, 웹 접근성(ARIA·포커스 트랩), **Ionic 스타일 적응형 웹 UI**, **CRA 수준의 로컬 프리뷰·데브 서버(`lace-web-dev`)**를 내장합니다.
 3. **Native 타깃 (GPU 가속 + 필수 CPU 폴백 · 데스크톱 & iOS/Android 풀 기본기)**:
    - GPUI(Zed)와 `anomalyco/rune`처럼 UI 엘리먼트, 레이아웃, 벡터 경로, 그림자, 글리프 아틀라스, **외부 3D/미디어 GPU 텍스처(`ExternalTexture` 제로카피 합성)**를 GPU로 고속 렌더링하며, **필수 CPU 소프트웨어 폴백 렌더러**와 **네이티브 접근성 트리 브리지(`AccessKit` 계열)**를 제공합니다.
-   - **데스크톱 기본기**: 멀티 윈도우(보조/플로팅 창), 창 위치·크기 복원, OS 네이티브 메뉴바·컨텍스트 메뉴, 시스템 트레이, 전역/로컬 단축키.
-   - **모바일(iOS/Android) 기본기**: 노치·홈 바 **안전 영역(`SafeArea`)** 자동 패딩, 소프트 키보드 회피(Keyboard Avoidance), 백 스와이프 제스처, 햅틱 피드백, 앱 포그라운드/백그라운드 수명주기.
-   - **네이티브 시스템 SDK (`lace-native-sys`)**: 파일 다이얼로그 & 외부 파일 드래그앤드롭, 클립보드 & 모바일 공유 시트(Share Sheet), OS 보안 키체인/키스토어(Bearer 인증 토큰 보관), 로컬 샌드박스 파일/SQLite, 푸시/로컬 알림, 딥링크(Custom Scheme / Universal Links).
+   - **로컬 백엔드/엔진 ↔ UI 3단계 통신**: ① 인프로세스(`SyncSignal` + Lock-Free `SharedRingBuf`), ② 로컬 멀티프로세스 IPC(OS `shm`/`mmap` 공유 메모리 Ring Buffer + Unix Socket/Named Pipe 기반 `hyper-serde` 바이너리 RPC), ③ 원격 서버(Dual-Rail)를 동일 인터페이스로 지원합니다.
+   - **데스크톱 기본기 & 특화 API**: 멀티 윈도우(보조/플로팅 창), 창 위치·크기 복원, OS 네이티브 메뉴바·컨텍스트 메뉴, 시스템 트레이, 전역/로컬 단축키, macOS `MenuBarExtra`(상단 메뉴바 팝오버)·플로팅 런처·독(Dock)/작업표시줄 진행률 연동.
+   - **모바일(iOS/Android) 기본기 & OS 특화 서피스**: 노치·홈 바 **안전 영역(`SafeArea`)** 자동 패딩, 소프트 키보드 회피(Keyboard Avoidance), 백 스와이프 제스처, 앱 수명주기, 그리고 **iOS Dynamic Island & Live Activities(`#[ios::live_activity]`)**, 홈/잠금화면 위젯(WidgetKit/Glance), App Intents(Siri/단축어), Android Ongoing Live Notification·PiP·폴더블 힌지(Posture) 시그널을 동일한 `ui!` 문법으로 선언할 수 있게 지원합니다.
+   - **크로스플랫폼 HW · SW · Alert SDK (`lace-native-sys`)**:
+     - **HW (`lace::hw`)**: 자이로/가속도/주변광 센서 시그널·링 버퍼, 카메라(`ExternalTexture` 제로카피 직결) & 마이크(오디오 Ring Buffer), 생체인증(Face ID/Touch ID/Android Biometrics) & 하드웨어 보안 키(Secure Enclave/Keystore), Apple Pencil/스타일러스(필압·기울기)·햅틱 파형·BLE/MIDI.
+     - **SW & Alert (`lace::sys`)**: 실제 OS 네이티브 Alert·모바일 ActionSheet·날짜/시간 피커·권한 요청 팝업, 파일 다이얼로그 & 드래그앤드롭, 클립보드 & 공유 시트(Share Sheet), 로컬 샌드박스 스토리지, 푸시/로컬 인터랙티브 알림, 딥링크, OS 백그라운드 실행 연장.
 4. **네이티브 WebView 절대 금지 & 옵트인 웹뷰 서피스 어댑터**:
    - `lace`의 네이티브 타깃은 Electron/Tauri처럼 웹뷰로 UI를 그리는 프레임워크가 **절대 아닙니다.** 기본 네이티브 렌더 파이프라인에는 WebView 의존성을 일절 두지 않습니다.
    - 단, 네이티브 앱의 특정 영역에 웹 화면을 띄워야 하는 경우에만, 같은 `lace`의 Web 타깃(DOM) 출력물을 네이티브 웹뷰 컨테이너에 마운트해 띄우는 **옵트인 호환 어댑터(`lace-adapter-webview`)**를 사용합니다.
