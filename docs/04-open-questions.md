@@ -17,5 +17,6 @@
 ## 결정됨
 
 - **웹(DOM)과 네이티브(GPU+CPU 폴백) UI를 `lace` 단일 레포로 통합** (2026-11-18): `00-overview.md`
+- **UI 뷰 마크업은 proc macro DSL(QML/Slint + Dioxus `rsx!` 레퍼런스)로 고정하고, 도메인/라우트/가드 조립은 Rust 체이닝으로 고정** (2026-11-18): `01-dx-and-dsl.md`
 - **Web 타깃(DOM 출력 + Leptos 파이프라인 + Ionic형 UI + CRA급 로컬 데브 서버) 및 `ring` 프로덕션 서빙 분리 확정** (2026-11-17): `00-overview.md`, `03-adapters-and-pipeline.md`
 - **Native 타깃(GPUI·`anomalyco/rune` 기반 GPU + 필수 CPU 폴백, 데스크톱·iOS·Android 지원, 네이티브 UI 내 WebView 절대 금지 및 옵트인 `lace-adapter-webview` 분리) 확정** (2026-11-17 ~ 2026-11-18): `00-overview.md`, `02-architecture.md`
