@@ -23,11 +23,11 @@
 | **`lace-ionic`** | 크로스플랫폼 웹 UI | Ionic을 레퍼런스로 한 적응형(모바일/데스크톱 감각) 웹 UI 컴포넌트, 네비게이션 스택, 터치 제스처 |
 | **`lace-adapter-client`** | 원격 API (`ring` 등) | 브라우저 `fetch` / `WebSocket` / `WebTransport` 위에서 `hyper-api` 계약을 실행하는 클라이언트 어댑터 |
 | **프로덕션 서빙 접점 (`ring` 소유)** | `ring::ring-adapter-lace` | `lace`가 생성한 웹 번들 및 `lace-ssr` 핸들러를 받아 프로덕션에서 서빙하는 역할은 `ring`이 담당 (연결 계약은 §3 참조) |
-| **네이티브 웹뷰 접점 (`hera` 소유)** | `hera::hera-adapter-lace-webview` | 네이티브 앱에서 웹뷰가 필요할 때 `lace`가 만든 DOM 출력물을 받아 웹뷰로 띄우는 어댑터는 `hera`가 담당 (연결 계약은 §3 참조) |
+| **네이티브 웹뷰 접점 (`glint` 소유)** | `glint::glint-adapter-lace-webview` | 네이티브 앱에서 웹뷰가 필요할 때 `lace`가 만든 DOM 출력물을 받아 웹뷰로 띄우는 어댑터는 `glint`가 담당 (연결 계약은 §3 참조) |
 
-## 3. 외부 호스팅 핸드오프 계약 (`ring` 프로덕션 서빙 · `hera` 웹뷰 호스팅 — 제안)
+## 3. 외부 호스팅 핸드오프 계약 (`ring` 프로덕션 서빙 · `glint` 웹뷰 호스팅 — 제안)
 
-`lace`는 DOM 구축·표현과 로컬 데브 프리뷰(`lace-dev`)까지만 소유하고, 프로덕션 서빙(`ring`)과 네이티브 웹뷰 호스팅(`hera`)은 외부 계층에 위임하므로 다음 3가지 경계를 공통 핸드오프 계약으로 둡니다(`hyperish/docs` `02-core-contracts.md` §1, §5 준수).
+`lace`는 DOM 구축·표현과 로컬 데브 프리뷰(`lace-dev`)까지만 소유하고, 프로덕션 서빙(`ring`)과 네이티브 웹뷰 호스팅(`glint`)은 외부 계층에 위임하므로 다음 3가지 경계를 공통 핸드오프 계약으로 둡니다(`hyperish/docs` `02-core-contracts.md` §1, §5 준수).
 
 ### 3.1 `lace` → `ring` (`ring-adapter-lace`, 프로덕션 서빙 및 SSR 핸드오프)
 
@@ -42,18 +42,18 @@
   - **`lace` 책임**: 뷰 트리 렌더링, Hydration 마커·상태 직렬화 생성, 매니페스트 스키마 생성.
   - **`ring` 책임**: 소켓 리스닝·TLS·압축·캐시 헤더(`Cache-Control`), 요청별 인증·접근 권한 검증(`02-core-contracts.md` §6), 구조적 취소 토큰 생성 및 전파(클라이언트 연결 종료 시 `lace-ssr` 렌더 스트림 즉시 drop).
 
-### 3.2 `lace` → `hera` (`hera-adapter-lace-webview`, 옵트인 네이티브 웹뷰 핸드오프)
+### 3.2 `lace` → `glint` (`glint-adapter-lace-webview`, 옵트인 네이티브 웹뷰 핸드오프)
 
 - **연결 방식**:
-  - `hera` 기본 코어는 웹뷰와 `lace`에 전혀 의존하지 않으며, 옵트인 어댑터 크레이트(`hera-adapter-lace-webview`)만 `lace`가 산출한 **정적 DOM/WASM 에셋 번들(`LaceBundleManifest`)**과 **`hyper-serde` 기반 IPC 브리지 인터페이스**를 받아 연결합니다.
+  - `glint` 기본 코어는 웹뷰와 `lace`에 전혀 의존하지 않으며, 옵트인 어댑터 크레이트(`glint-adapter-lace-webview`)만 `lace`가 산출한 **정적 DOM/WASM 에셋 번들(`LaceBundleManifest`)**과 **`hyper-serde` 기반 IPC 브리지 인터페이스**를 받아 연결합니다.
 - **교환 대상**:
   1. **로컬 웹뷰 에셋 패키지**: 커스텀 프로토콜(예: `lace://app/...`)로 마운트할 HTML 엔트리, WASM/JS/CSS 번들, 에셋 매니페스트.
-  2. **초기 상태 시드 & 양방향 IPC 메시지**: 웹뷰 부트스트랩 시 주입할 초기 상태 바이트(`hyper-serde`) 및 실행 중 네이티브(`hera`) ↔ 웹뷰(`lace`) 간 상태·이벤트 동기화 메시지.
+  2. **초기 상태 시드 & 양방향 IPC 메시지**: 웹뷰 부트스트랩 시 주입할 초기 상태 바이트(`hyper-serde`) 및 실행 중 네이티브(`glint`) ↔ 웹뷰(`lace`) 간 상태·이벤트 동기화 메시지.
 - **책임 경계**:
   - **`lace` 책임**: 웹뷰 내부 DOM 렌더링, 클라이언트 측 시그널 반응성, 웹뷰 측 IPC 어댑터(`lace-adapter-client`) 수신·발신.
-  - **`hera` 책임**: 네이티브 OS 웹뷰 컨테이너의 생성·마운트·파괴 수명주기 관리(부모 네이티브 뷰 언마운트 시 웹뷰 리소스 및 진행 중 IPC 즉시 해제), 커스텀 프로토콜 에셋 로더 등록, 브리지 재연결·초기화 조율.
+  - **`glint` 책임**: 네이티브 OS 웹뷰 컨테이너의 생성·마운트·파괴 수명주기 관리(부모 네이티브 뷰 언마운트 시 웹뷰 리소스 및 진행 중 IPC 즉시 해제), 커스텀 프로토콜 에셋 로더 등록, 브리지 재연결·초기화 조율.
 
 ### 3.3 버전 호환 규칙 (공통)
 
 - `LaceBundleManifest` 포맷 버전과 SSR/IPC 브리지 계약 버전은 공통 기반인 `hyper`(`hyper-api` / `hyper-serde`)에 선언된 스키마 버전을 따릅니다.
-- `ring-adapter-lace`와 `hera-adapter-lace-webview`는 마운트(초기화) 시점에 자신이 지원하는 매니페스트·브리지 버전을 검사하고, 호환되지 않으면 조용히 무시하지 않고 초기화 오류로 즉시 실패시킵니다(`02-core-contracts.md` §5).
+- `ring-adapter-lace`와 `glint-adapter-lace-webview`는 마운트(초기화) 시점에 자신이 지원하는 매니페스트·브리지 버전을 검사하고, 호환되지 않으면 조용히 무시하지 않고 초기화 오류로 즉시 실패시킵니다(`02-core-contracts.md` §5).
