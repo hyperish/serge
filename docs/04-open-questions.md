@@ -16,16 +16,6 @@
 
 ## 결정됨
 
-- **결정**: 기존 네이티브 UI 레포(`glint`, 구 `hera`)를 없애고 **`lace` 하나로 웹(DOM)과 네이티브(GPU+CPU 폴백, 데스크톱·iOS·Android) UI를 모두 통합**함
-  - **날짜**: 2026-11-18
-  - **이유**: React Native, Flutter, Dioxus처럼 웹과 네이티브가 이미 동일한 UI 문법과 반응형 상태(`hyper-state`)를 공유하므로 단일 UI 프레임워크 안에서 웹 타깃과 네이티브 타깃을 함께 제공하는 것이 수직 통합과 DX에 가장 자연스러움
-  - **영향**: `lace` 전체 문서(`00`~`04`), `hyperish/docs`, `hyper`, `ring`
-- **결정**: Web 타깃은 모든 DOM/웹 기능을 `hyper`/`lace`로 표현해 DOM으로 출력하고 최소 **CRA 수준의 로컬 프리뷰/데브 서빙(`lace-web-dev`)**을 내장하며(파이프라인: Leptos, 웹 UI: Ionic), 프로덕션 서빙은 `ring`이 담당함
-  - **날짜**: 2026-11-17
-  - **영향**: `00-overview.md`, `02-architecture.md`, `03-adapters-and-pipeline.md`
-- **결정**: Native 타깃은 GPUI 및 `anomalyco/rune`을 레퍼런스로 하는 GPU(필수 CPU 폴백 포함) 기반 네이티브 UI로 데스크톱·iOS·Android를 지원하며, **네이티브 UI에 WebView는 절대 사용하지 않고** 웹뷰가 꼭 필요한 경우에만 내부 옵트인 어댑터(`lace-adapter-webview`)로 Web 타깃 출력을 마운트함
-  - **날짜**: 2026-11-17 (2026-11-18 `lace`로 통합)
-  - **영향**: `00-overview.md`, `02-architecture.md`, `03-adapters-and-pipeline.md`
-- **결정**: 공통 UI 문법은 QML 기반 Slint 스타일 + Dioxus `rsx!`를 레퍼런스로 삼되, DSL 채택 이유는 오직 개발 생산성이므로 GPUI처럼 순수 Rust 빌더만으로도 가독성이 좋거나 더 효율적인 방법이 있다면 어떤 방법을 써도 무관함
-  - **날짜**: 2026-11-17
-  - **영향**: `01-dx-and-dsl.md`
+- **웹(DOM)과 네이티브(GPU+CPU 폴백) UI를 `lace` 단일 레포로 통합** (2026-11-18): `00-overview.md`
+- **Web 타깃(DOM 출력 + Leptos 파이프라인 + Ionic형 UI + CRA급 로컬 데브 서버) 및 `ring` 프로덕션 서빙 분리 확정** (2026-11-17): `00-overview.md`, `03-adapters-and-pipeline.md`
+- **Native 타깃(GPUI·`anomalyco/rune` 기반 GPU + 필수 CPU 폴백, 데스크톱·iOS·Android 지원, 네이티브 UI 내 WebView 절대 금지 및 옵트인 `lace-adapter-webview` 분리) 확정** (2026-11-17 ~ 2026-11-18): `00-overview.md`, `02-architecture.md`
