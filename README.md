@@ -2,7 +2,36 @@
 
 하이퍼리쉬(Hyperish) 프레임워크 패밀리의 **웹(DOM) · 네이티브(GPU/CPU) 통합 크로스플랫폼 UI 프레임워크** 레포입니다.
 
-React Native, Flutter, Dioxus처럼 **하나의 공통 UI 문법과 반응형 상태(`hyper-state`)**로 웹과 네이티브를 모두 다루되, 각 플랫폼에서 가장 이상적인 고성능 렌더 파이프라인으로 출력합니다:
+```rust
+use hyper::prelude::*;
+use lace::prelude::*;
+
+#[component]
+pub fn CounterCard() -> Element {
+    let mut count = signal(0);
+
+    // 이 컴포넌트 한 벌이:
+    // • Web 타깃에서는 실제 DOM (Leptos식 세밀한 시그널 패칭)으로,
+    // • Desktop / iOS / Android에서는 WebView 없이 120fps GPU (+ 필수 CPU 폴백)로 렌더링됩니다.
+    ui! {
+        Card { padding: 16px, gap: 12px,
+            Label { text: "Count: {count}" }
+            Button {
+                text: "Increment",
+                clicked => { count += 1; }
+            }
+        }
+    }
+}
+```
+
+## 왜 `lace`인가?
+
+| 기존 UI 스택의 한계 | `lace`의 해답 |
+|---|---|
+| **Electron / Tauri**: 데스크톱·모바일 앱인데 결국 무거운 OS WebView에 갇혀 메모리와 120fps 렌더링 한계가 명확함 | **WebView 없는 순수 GPU 네이티브 + 필수 CPU 폴백**: 네이티브(Desktop·iOS·Android)는 GPUI/Rune식 GPU 배칭(+CPU 폴백)으로 직접 그리고, 웹뷰가 꼭 필요한 경우에만 옵트인 어댑터로 격리 |
+| **Flutter**: 웹에서도 DOM 대신 캔버스 통째로 그려 웹 표준·SEO·번들 크기에서 불리함 | **웹에서는 진짜 DOM, 네이티브에서는 진짜 GPU**: 하나의 UI 문법을 쓰되 웹 타깃은 Leptos식 세밀한 실제 DOM/SSR로, 네이티브 타깃은 GPU/CPU 프리미티브로 출력 |
+| **구조를 강제하는 프레임워크**: UI 조각 외에 상태·라우팅·권한 가드가 흩어지거나 매크로 감옥에 갇힘 | **아키텍처 고점을 여는 컴포넌트 설계**: `ring` 백엔드와 대칭되는 Rust 스타일 컴포넌트 조립(`provide`, `wrap`, `route`)과 GPUI식 순수 Rust 빌더 탈출구로 개발자가 직접 아키텍처를 설계 |
 - **공통 UI 문법 & 생산성 중심 DX**: **QML 기반 Slint 스타일**과 **Dioxus `rsx!`**를 레퍼런스로 삼되, **GPUI처럼 DSL 없이 순수 Rust 빌더·체이닝만으로도 가독성이 충분하면 DSL 없이도 작성**할 수 있습니다. 웹 전용 기능(DOM/SSR)이 들어가느냐 네이티브 전용 기능(OS 창/GPU 서피스)이 들어가느냐에 따라 타깃 확장이 나뉩니다.
 - **Web 타깃 (DOM / Web)**:
   - 브라우저의 모든 DOM/웹 기능을 `hyper`/`lace`로 표현해 쉽게 구축하고 실제 DOM으로 출력합니다.
