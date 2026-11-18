@@ -27,13 +27,13 @@ lace/
     lace-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프·ExternalTexture 제로카피 합성)
     lace-native-cpu/          # 필수 CPU 소프트웨어 폴백 렌더 백엔드 (동일 ScenePrimitive 소비)
     lace-native-text/         # 네이티브 폰트 탐색, 텍스트 셰이핑, 줄바꿈, 서브픽셀/SDF 글리프 아틀라스
-    lace-native-sys/          # 크로스플랫폼 네이티브 SDK (파일 다이얼로그·드래그앤드롭·클립보드·공유 시트·Keychain·알림·딥링크·AccessKit 접근성)
-    lace-platform-desktop/    # macOS, Windows, Linux 멀티 윈도우·네이티브 메뉴바·시스템 트레이·단축키·VSync·IME 어댑터
-    lace-platform-ios/        # iOS UIKit/Metal·CADisplayLink·Safe Area·키보드 회피·멀티터치·햅틱·수명주기 어댑터
-    lace-platform-android/    # Android NativeWindow·Choreographer·Vulkan/GLES·Safe Area·키보드 회피·백 제스처·햅틱 어댑터
+    lace-native-sys/          # 크로스플랫폼 HW(`lace::hw`: 센서·카메라 제로카피·생체인증·펜슬/햅틱·BLE) & SW(`lace::sys`: 네이티브 Alert/ActionSheet·파일·Keychain·알림·딥링크·AccessKit)
+    lace-platform-desktop/    # macOS/Windows/Linux 멀티 윈도우·메뉴바/MenuBarExtra·트레이·단축키·로컬 Shm IPC·VSync 어댑터
+    lace-platform-ios/        # iOS UIKit/Metal·Safe Area·키보드 회피·Dynamic Island/Live Activities(`#[ios::live_activity]`)·WidgetKit·App Intents 어댑터
+    lace-platform-android/    # Android NativeWindow·Vulkan/GLES·Safe Area·키보드 회피·Ongoing Live Notification·위젯·폴더블 Posture 어댑터
 
-    # --- 공용 통신 및 옵트인 웹뷰 어댑터 ---
-    lace-adapter-client/      # 웹/네이티브 공용 Dual-Rail(`hyper-serde`+WebTransport / HTTP+WS) 및 인라인 서버 함수 클라이언트
+    # --- 공용 통신(3-Tier: In-Process / Shm IPC / Remote Dual-Rail) 및 옵트인 웹뷰 어댑터 ---
+    lace-adapter-client/      # 인프로세스(`SharedRingBuf`), 로컬 IPC(OS `shm` + `hyper-serde` RPC), 원격 서버(Dual-Rail) 통합 클라이언트
     lace-adapter-webview/     # [옵트인 전용] 네이티브 창 일부에 `lace-web-dom` 출력물을 웹뷰 서피스로 띄울 때만 사용
 ```
 
