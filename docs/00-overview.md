@@ -8,16 +8,20 @@
 
 `lace`는 **단일 UI 문법과 상태 모델** 위에서 웹(DOM)과 네이티브(GPU/CPU) 두 축을 모두 책임집니다:
 
-1. **공통 UI 코어 & 단일 문법**:
-   - 컴포넌트, 프로퍼티·시그널 바인딩(`hyper-state`), 레이아웃, 이벤트 흐름을 하나의 UI 문법으로 작성합니다.
-   - 기본 UI는 플랫폼 중립적으로 공유하고, 웹(DOM) 전용 기능이 들어가느냐 네이티브(OS/GPU) 전용 기능이 들어가느냐에 따라 타깃 기능이 나뉩니다.
-2. **Web 타깃 (DOM 표현·출력 + CRA급 로컬 데브 서빙 + Ionic형 웹 UI)**:
-   - 브라우저의 모든 DOM 요소, 이벤트, 스타일, Web API(History, Storage, Canvas/WebGPU 슬롯 등)를 `hyper`/`lace`로 표현해 쉽게 구축하고 **실제 DOM(및 웹 번들 산출물)으로 출력**합니다.
-   - `ring` 백엔드 없이 `lace` 단독으로도 즉시 웹 앱을 띄우고 핫리로드할 수 있도록 **최소 CRA(Create React App) 수준의 로컬 프리뷰·데브 서빙(`lace-web-dev`)**을 내장합니다.
-   - 데스크톱·모바일 웹 환경에 적응하는 **Ionic 스타일의 웹 UI 컴포넌트**를 제공합니다.
-3. **Native 타깃 (GPU 가속 + 필수 CPU 폴백 · 데스크톱 & iOS/Android)**:
-   - GPUI(Zed)와 `anomalyco/rune`처럼 UI 엘리먼트, 레이아웃, 벡터 경로, 그림자, 글리프 아틀라스, 커스텀 뷰포트를 **GPU 프리미티브로 직접 고속 렌더링**하며, GPU가 제한되거나 헤드리스 CI 테스트 환경에서도 동일하게 동작하도록 **CPU 소프트웨어 폴백 렌더러를 필수로 제공**합니다.
-   - 데스크톱(macOS, Windows, Linux)뿐 아니라 **iOS와 Android 모바일 네이티브를 1급 타깃으로 지원**합니다.
+1. **공통 UI 코어 · 단일 문법 · 풀스택 클라이언트 기본기**:
+   - 컴포넌트, 프로퍼티·시그널 바인딩(`signal()`), 레이아웃, 이벤트 흐름을 하나의 proc macro UI 문법(`ui!`)으로 작성합니다.
+   - **타입 안전 라우터(`lace-router`)**: URL 파라미터·쿼리의 `hyper` 모델 자동 파싱, 중첩 레이아웃, 권한 가드(`RequireAuth`), 화면 전환 시 이전 요청 자동 취소(`CancellationToken`) 및 스크롤 복원.
+   - **선언적 폼(Form) & 비동기 리소스**: `hyper-validate` 모델을 폼에 직결한 실시간 입력 검증·중복 제출 잠금·드래그앤드롭 파일 업로드, `Suspense`·`ErrorBoundary`·SWR·**낙관적 UI(Optimistic UI)**, 그리고 `ring` 백엔드 핸들러를 일반 Rust 함수처럼 부르는 **인라인 서버 함수 호출**.
+   - **테마 토큰 · 다국어(i18n) · 에셋(`asset!`)**: 라이트/다크 테마 시그널과 디자인 토큰이 웹(CSS 커스텀 프로퍼티)과 네이티브(GPU 컬러 토큰) 양쪽에서 동일하게 동작합니다.
+2. **Web 타깃 (DOM 표현·출력 + CRA급 데브 서빙 + Ionic형 웹 UI + SEO/SSG)**:
+   - 브라우저의 모든 DOM 요소, 이벤트, 스타일, Web API를 `hyper`/`lace`로 표현해 쉽게 구축하고 **실제 DOM(및 웹 번들)으로 출력**합니다.
+   - 컴포넌트 내 `<Title>`, `<Meta>`, OpenGraph 선언 시 SSR/SSG `<head>` 자동 주입 및 랜딩·문서 사이트용 **정적 사이트 생성(SSG)**을 지원합니다.
+   - `localStorage`/`IndexedDB`와 동기화되는 **영속 시그널(`persistent_signal`)**, 오프라인 편집 큐, 웹 접근성(ARIA·포커스 트랩), **Ionic 스타일 적응형 웹 UI**, **CRA 수준의 로컬 프리뷰·데브 서버(`lace-web-dev`)**를 내장합니다.
+3. **Native 타깃 (GPU 가속 + 필수 CPU 폴백 · 데스크톱 & iOS/Android 풀 기본기)**:
+   - GPUI(Zed)와 `anomalyco/rune`처럼 UI 엘리먼트, 레이아웃, 벡터 경로, 그림자, 글리프 아틀라스, **외부 3D/미디어 GPU 텍스처(`ExternalTexture` 제로카피 합성)**를 GPU로 고속 렌더링하며, **필수 CPU 소프트웨어 폴백 렌더러**와 **네이티브 접근성 트리 브리지(`AccessKit` 계열)**를 제공합니다.
+   - **데스크톱 기본기**: 멀티 윈도우(보조/플로팅 창), 창 위치·크기 복원, OS 네이티브 메뉴바·컨텍스트 메뉴, 시스템 트레이, 전역/로컬 단축키.
+   - **모바일(iOS/Android) 기본기**: 노치·홈 바 **안전 영역(`SafeArea`)** 자동 패딩, 소프트 키보드 회피(Keyboard Avoidance), 백 스와이프 제스처, 햅틱 피드백, 앱 포그라운드/백그라운드 수명주기.
+   - **네이티브 시스템 SDK (`lace-native-sys`)**: 파일 다이얼로그 & 외부 파일 드래그앤드롭, 클립보드 & 모바일 공유 시트(Share Sheet), OS 보안 키체인/키스토어(Bearer 인증 토큰 보관), 로컬 샌드박스 파일/SQLite, 푸시/로컬 알림, 딥링크(Custom Scheme / Universal Links).
 4. **네이티브 WebView 절대 금지 & 옵트인 웹뷰 서피스 어댑터**:
    - `lace`의 네이티브 타깃은 Electron/Tauri처럼 웹뷰로 UI를 그리는 프레임워크가 **절대 아닙니다.** 기본 네이티브 렌더 파이프라인에는 WebView 의존성을 일절 두지 않습니다.
    - 단, 네이티브 앱의 특정 영역에 웹 화면을 띄워야 하는 경우에만, 같은 `lace`의 Web 타깃(DOM) 출력물을 네이티브 웹뷰 컨테이너에 마운트해 띄우는 **옵트인 호환 어댑터(`lace-adapter-webview`)**를 사용합니다.
