@@ -1,0 +1,16 @@
+[package]
+name = "serge"
+description = "Unified cross-platform Web DOM and Native GPU/CPU UI framework for the Hyperish family"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "../../README.md"
+keywords = ["hyperish", "ui", "gui", "wasm", "cross-platform"]
+categories = ["gui", "web-programming"]
+
+[lints]
+workspace = true
