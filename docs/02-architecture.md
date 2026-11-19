@@ -1,6 +1,6 @@
 # 02. 아키텍처와 크레이트 구조 (lace)
 
-> 상태: `apps/`·`crates/` 모노레포·`hyper` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-18
+> 상태: `apps/`·`crates/` 모노레포·`hyper` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-19
 
 `lace` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1). 하나의 공통 UI 코어 위에 **Web(DOM/SSR) 렌더 타깃**과 **Native(GPU/CPU) 렌더 타깃**이 대칭으로 올라갑니다.
 
@@ -14,7 +14,7 @@ lace/
     lace/                     # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
     lace-core/                # 뷰 트리, 폼(`hyper-validate`), Suspense/ErrorBoundary/낙관적 UI, 테마·i18n, PaintCtx/ScenePrimitive
     lace-macros/              # 공통 UI 문법(QML/Slint + Dioxus rsx! 스타일 `ui!`) proc macro (hyper-parser 참조)
-    lace-layout/              # 웹·네이티브 공용 고속 레이아웃(Flexbox/Grid/절대배치) 및 스타일·토큰 계산 엔진
+    lace-style/               # 웹·네이티브 공용 스타일·디자인 토큰·레이아웃 IR (웹 타깃에서는 CSS로 직결되어 WASM에 솔버 미포함)
     lace-router/              # 웹(History API) 및 네이티브(네비게이션 스택) 공용 타입 안전 라우터·중첩 레이아웃·가드
 
     # --- Web (DOM) 타깃 크레이트 ---
@@ -24,13 +24,14 @@ lace/
     lace-web-dev/             # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyper preview` 연동)
 
     # --- Native (GPU + 필수 CPU 폴백) 타깃 크레이트 ---
+    lace-native-layout/       # 네이티브 전용 고속 Flexbox/Grid/절대배치 레이아웃 솔버 (`taffy` 포크 계열, Web WASM 번들과 완전 분리)
     lace-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프·ExternalTexture 제로카피 합성)
     lace-native-cpu/          # 필수 CPU 소프트웨어 폴백 렌더 백엔드 (동일 ScenePrimitive 소비)
     lace-native-text/         # 네이티브 폰트 탐색, 텍스트 셰이핑, 줄바꿈, 서브픽셀/SDF 글리프 아틀라스
     lace-native-sys/          # 크로스플랫폼 HW(`lace::hw`: 센서·카메라 제로카피·생체인증·펜슬/햅틱·BLE) & SW(`lace::sys`: 네이티브 Alert/ActionSheet·파일·Keychain·알림·딥링크·AccessKit)
     lace-platform-desktop/    # macOS/Windows/Linux 멀티 윈도우·메뉴바/MenuBarExtra·트레이·단축키·로컬 Shm IPC·VSync 어댑터
-    lace-platform-ios/        # iOS UIKit/Metal·Safe Area·키보드 회피·Dynamic Island/Live Activities(`#[ios::live_activity]`)·WidgetKit·App Intents 어댑터
-    lace-platform-android/    # Android NativeWindow·Vulkan/GLES·Safe Area·키보드 회피·Ongoing Live Notification·위젯·폴더블 Posture 어댑터
+    lace-platform-ios/        # iOS UIKit/Metal·Safe Area·키보드 회피 어댑터 + Dynamic Island/WidgetKit(`#[ios::live_activity]`) SwiftUI 코드젠 브리지·App Intents
+    lace-platform-android/    # Android NativeWindow·Vulkan/GLES·Safe Area·키보드 회피·폴더블 Posture 어댑터 + Ongoing Notification/위젯 Glance 코드젠 브리지
 
     # --- 공용 통신(3-Tier: In-Process / Shm IPC / Remote Dual-Rail) 및 옵트인 웹뷰 어댑터 ---
     lace-adapter-client/      # 인프로세스(`SharedRingBuf`), 로컬 IPC(OS `shm` + `hyper-serde` RPC), 원격 서버(Dual-Rail) 통합 클라이언트
@@ -40,10 +41,10 @@ lace/
 ## 2. 계층 의존 방향과 `hyper` 코어(`ref`) 수직화
 
 ```
-  [ Web 타깃: lace-web-{dom,ssr,ionic,dev} ]    [ Native 타깃: lace-native-{gpu,cpu,text} + lace-platform-* ]
+  [ Web 타깃: lace-web-{dom,ssr,ionic,dev} ]    [ Native 타깃: lace-native-{layout,gpu,cpu,text,sys} + lace-platform-* ]
                        \                                              /
                         ▼                                            ▼
-                   [ lace-core / lace-layout / lace-router / lace-macros ]
+                   [ lace-core / lace-style / lace-router / lace-macros ]
                                              │
                                              ▼ (코어 ref)
                        [ hyper (core / state / parser / serde / api) ]
