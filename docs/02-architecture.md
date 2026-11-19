@@ -53,4 +53,14 @@ serge/
 - **단일 반응성 및 UI 문법 (`hyve-state`, `hyve-parser`)**: 웹 타깃과 네이티브 타깃이 모두 `hyve-state`와 `serge-core` 뷰 트리를 공유하므로, 컴포넌트와 비즈니스 상태 로직을 두 번 작성하지 않습니다.
 - **네이티브 GPU & CPU 백엔드의 대칭성**: 네이티브 타깃에서는 `serge-core`가 플랫폼 중립 `ScenePrimitive` 리스트를 생성하고, `serge-native-gpu`와 `serge-native-cpu`(필수 폴백)가 동일한 프리미티브를 소비해 렌더링합니다.
 - **네이티브 WebView 격리 보장**: `serge-native-*`와 `serge-platform-*` 기본 트리에는 어떠한 WebView 의존성도 링크되지 않습니다. 웹뷰가 꼭 필요한 응용에서만 같은 레포 내의 옵트인 어댑터(`serge-adapter-webview`)를 켜서 `serge-web-dom` 출력물을 웹뷰 서피스로 마운트합니다.
-- **내부 포크 및 `unit optimization`**: 웹 DOM 패칭 및 네이티브 GPU/CPU·레이아웃·텍스트 포크 크레이트의 최적화 절차는 `hyperish/docs`의 `05-development-rules.md` §7을 따릅니다.
+
+## 3. 확정 MIT 포크 스택 및 내부 코어 `unit optimization` 타깃 (2026-11-19 확정)
+
+| 모듈 | 베이스 크레이트 (확인 버전 · 라이선스) | 포크 후 내부 코어 개조(1·2단계 `unit optimization`) 방향 |
+|---|---|---|
+| `serge-web-dom` | `tachys` (`0.3.0-rc1`, `MIT`) | 극단적 제네릭 튜플 중첩(컴파일 시간·WASM 팽창)을 걷어내고 `serge-macros`(`ui!`)가 정적 `<template>` + 고정 슬롯 오프셋 패칭 코드만 직접 방출하도록 경량화 |
+| `serge-native-layout` | `taffy` (`0.15.1`, `MIT`) | Web WASM 번들과 완전 분리; `serge-style`의 **컴팩트 SoA 스타일 테이블 + 더티 서브트리 증분 계산**으로 내부 메모리 레이아웃 개조 |
+| `serge-native-gpu` | `wgpu` (`30.0.2`, `MIT OR Apache-2.0`) + `vello` (`0.12.0`, `Apache-2.0 OR MIT`) *(GPUI는 아키텍처 레퍼런스 전용, 포크 금지)* | Phase 1은 단일 거대 인스턴스 버퍼 배칭(프레임당 1~3 드로우콜)으로 `wgpu` 제출 오버헤드 극소화 → Phase 2~3은 `ScenePrimitive` 아래를 **`wgpu-hal` 직결 또는 네이티브 Metal/Vulkan 직접 백엔드**로 교체 |
+| `serge-native-cpu` | `vello_cpu` (`0.4.0`, `Apache-2.0 OR MIT`) | `vello`와 동일 씬 모델을 공유하는 SIMD 소프트웨어 래스터라이저로 필수 CPU 폴백 대칭 구현 |
+| `serge-native-text` | `parley` (`0.13.0`) + `swash` (`0.2.10`, `Apache-2.0 OR MIT`) | Linebender 텍스트 셰이핑·글리프 래스터라이저를 `serge-native-gpu`/`cpu` 아틀라스에 직결 |
+| `serge-platform-*` · `serge-native-sys` | `winit` (`0.31.0-beta.4`, `Apache-2.0` — **포크 없는 외부 의존성 전용**), `accesskit` (`0.25.2`, `MIT OR Apache-2.0`) | `winit`은 외부 의존성으로만 사용해 순수 MIT 유지; 추후 OS 창 제어 최적화 필요 시 `raw-window-handle`(`0.6.2`, `MIT`) 기반 자체 MIT OS 어댑터로 대체 |
