@@ -1,6 +1,6 @@
 # 01. DX 및 DSL 설계 (lace)
 
-> 상태: 뷰 마크업 proc macro DSL 고정(QML/Slint + Dioxus `rsx!` 레퍼런스) · 기능 조립 Rust 체이닝 · CRA급 데브 서버 내장은 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-18
+> 상태: 뷰 마크업 proc macro DSL 고정(QML/Slint + Dioxus `rsx!` 레퍼런스) · 기능 조립 Rust 체이닝 · CRA급 데브 서버 내장은 **확정**, 세부 키워드는 **제안/미정** · 기준일: 2026-11-19
 
 `lace`의 DX 목표는 **웹(DOM)이든 네이티브(GPU/CPU, 데스크톱·iOS·Android)든 완전히 동일한 proc macro UI DSL로 화면을 구축**하고, 기능·상태·라우트 조립은 `ring`과 동일한 Rust 체이닝으로 묶는 것입니다.
 
@@ -42,7 +42,7 @@ pub fn ProjectEditorCard(
             layout: v_stack,
             gap: 8px,
             padding: 12px,
-            Label { text: "Exposure: {exposure():.2}" }
+            Text { "Exposure: {exposure():.2}" }
             Slider {
                 range: -5.0..=5.0,
                 value: exposure(),
@@ -52,10 +52,10 @@ pub fn ProjectEditorCard(
                 text: if liked() { "좋아요 취소" } else { "좋아요" },
                 clicked => { liked.toggle(); }
             }
-            // 저수준 GPU/CPU 또는 Canvas/WebGPU 직접 드로잉이 필요할 때는 Canvas 위젯의 on_paint로 탈출
+            // 저수준 GPU/CPU 또는 Canvas/WebGPU 직접 드로잉이 필요할 때는 Canvas 위젯의 paint 이벤트로 탈출
             Canvas {
                 height: 64px,
-                on_paint: move |bounds, ctx: &mut PaintCtx| {
+                paint(bounds, ctx) => {
                     ctx.draw_histogram(bounds, exposure());
                 }
             }
@@ -63,29 +63,32 @@ pub fn ProjectEditorCard(
     }
 }
 
-// 3) 로컬 엔진 공유 메모리 Ring Buffer(`SharedRingBuf`) & iOS Dynamic Island(`#[ios::live_activity]`) 활용
+// 3) 로컬 엔진 공유 메모리 Ring Buffer(`SharedRingBuf`, #[repr(C)] POD) & iOS Dynamic Island(`#[ios::live_activity]`) 활용
 #[component]
 pub fn RealtimeTelemetry(ring_buf: SharedRingBuf<FrameMetrics>) -> Element {
     ui! {
         Canvas {
             height: 80px,
-            on_paint: move |bounds, ctx: &mut PaintCtx| {
-                // 인프로세스든 로컬 데몬(Shm IPC)이든 직렬화·락·복사 없이 최신 슬라이스를 바로 드로잉
-                let samples = ring_buf.read_latest(128);
-                ctx.draw_sparkline(bounds, samples);
+            paint(bounds, ctx) => {
+                // 인프로세스든 로컬 데몬(Shm IPC)이든 찢어짐(tearing) 없는 스냅샷/읽기 가드로 최신 샘플을 안전하게 드로잉
+                let mut samples = [FrameMetrics::ZERO; 128];
+                let n = ring_buf.read_latest_snapshot(&mut samples);
+                ctx.draw_sparkline(bounds, &samples[..n]);
             }
         }
     }
 }
 
+// Apple ActivityKit 제약상 런타임 GPU 렌더링이 불가하므로,
+// 정적 ui! 서브셋(Canvas·실시간 signal 제외)을 `hyper build` 시점에 SwiftUI Widget Extension으로 트랜스파일(codegen)함
 #[ios::live_activity]
 pub fn ExportIsland(state: ExportStatus) -> LiveActivity {
     live_activity! {
         compact_leading: ui! { Icon { "cube" } },
-        compact_trailing: ui! { Label { "{(state.progress * 100.0) as u32}%" } },
+        compact_trailing: ui! { Text { "{(state.progress * 100.0) as u32}%" } },
         expanded: ui! {
             Stack { gap: 8px,
-                Label { "{state.project_name} 내보내는 중..." }
+                Text { "{state.project_name} 내보내는 중..." }
                 ProgressBar { value: state.progress }
             }
         }
