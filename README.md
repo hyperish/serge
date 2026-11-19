@@ -15,7 +15,7 @@ pub fn CounterCard() -> Element {
     // • Desktop / iOS / Android에서는 WebView 없이 120fps GPU (+ 필수 CPU 폴백)로 렌더링됩니다.
     ui! {
         Card { padding: 16px, gap: 12px,
-            Label { text: "Count: {count}" }
+            Text { "Count: {count()}" }
             Button {
                 text: "Increment",
                 clicked => { count += 1; }
