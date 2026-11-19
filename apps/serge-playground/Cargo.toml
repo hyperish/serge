@@ -1,0 +1,17 @@
+[package]
+name = "serge-playground"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Interactive MVP showcase binary for serge Web DOM and Native GPU/CPU pipelines"
+
+[dependencies]
+hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
+serge = { path = "../../crates/serge" }
+
+[lints]
+workspace = true

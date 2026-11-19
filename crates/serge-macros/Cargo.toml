@@ -1,0 +1,16 @@
+[package]
+name = "serge-macros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Procedural macros (#[component], ui!, live_activity!, #[ios::live_activity]) for the serge UI framework"
+
+[lib]
+proc-macro = true
+
+[lints]
+workspace = true

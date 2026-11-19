@@ -12,5 +12,9 @@ readme = "../../README.md"
 keywords = ["hyperish", "ui", "gui", "wasm", "cross-platform"]
 categories = ["gui", "web-programming"]
 
+[dependencies]
+hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
+serge-macros = { path = "../serge-macros" }
+
 [lints]
 workspace = true
