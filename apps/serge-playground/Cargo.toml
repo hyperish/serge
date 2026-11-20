@@ -11,6 +11,7 @@ description = "Interactive MVP showcase binary for serge Web DOM and Native GPU/
 
 [dependencies]
 hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
+orbic = { git = "https://github.com/hyperish/orbic.git", branch = "main" }
 serge = { path = "../../crates/serge" }
 
 [lints]
