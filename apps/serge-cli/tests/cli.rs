@@ -72,3 +72,50 @@ fn builds_the_playground_for_the_browser() {
     );
     let _ = std::fs::remove_dir_all(out_dir);
 }
+
+/// Under `hyve preview` (`HYVE_STAGE_LIFELINE=stdin`) the preview stops when
+/// its stdin closes, and its port is free again.
+#[test]
+fn preview_stops_when_hyve_closes_its_stdin() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+    let port = 18_000 + (std::process::id() % 1_000) as u16 * 20;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hyve-serge"))
+        .args(["preview", "--web", "--no-watch", "-p", "serge-playground"])
+        .args(["--port", &port.to_string()])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("HYVE_STAGE_LIFELINE", "stdin")
+        .stdin(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let err = BufReader::new(child.stderr.take().unwrap());
+    let mut said = String::new();
+    let mut addr = None;
+    for line in err.lines().map_while(Result::ok) {
+        said.push_str(&line);
+        said.push('\n');
+        if let Some(rest) = line.split(" at http://").nth(1) {
+            addr = Some(rest.trim_end_matches('/').to_owned());
+            break;
+        }
+    }
+    let addr = addr.unwrap_or_else(|| panic!("never served:\n{said}"));
+    assert!(std::net::TcpStream::connect(&addr).is_ok());
+
+    drop(child.stdin.take());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(s) = child.try_wait().unwrap() {
+            break s;
+        }
+        assert!(Instant::now() < deadline, "the preview did not stop");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert!(status.success(), "{status}");
+    assert!(
+        std::net::TcpStream::connect(&addr).is_err(),
+        "{addr} still served"
+    );
+}

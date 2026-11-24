@@ -43,17 +43,21 @@ pub fn CounterCard() -> Element {
 cargo run -p serge-playground --features server
 ```
 
-**웹 브라우저** (터미널 두 개):
+**웹 브라우저** (`hyve preview`, 명령 하나):
 
 ```sh
-# 1) orbic 백엔드: http://127.0.0.1:3000/v1
-cargo run -p serge-playground --features server --bin playground-server
+# 처음 한 번: hyve와 두 프레임워크의 도구 설치 (hyve·orbic이 배포되기 전이라 경로로 설치)
+cargo install --locked --path ../hyve/apps/hyve-cli
+cargo install --locked --path ../orbic/apps/orbic-cli
+cargo install --locked --path apps/serge-cli
 
-# 2) 웹 번들 + 데브 서버: http://127.0.0.1:8080/ (`/v1`은 백엔드로 프록시, 소스를 저장하면 다시 빌드하고 새로 고침)
-cargo run -p serge-cli -- preview --web
+# 웹 번들 + 데브 서버 http://127.0.0.1:8080/ 과 orbic 백엔드 http://127.0.0.1:3000/v1 을 함께 실행
+hyve preview --web
 ```
 
-웹 빌드에는 `rustup target add wasm32-unknown-unknown`과 `Cargo.lock`의 버전과 같은 `wasm-bindgen` CLI(`cargo install wasm-bindgen-cli --version =0.2.130`)가 필요합니다. 프록시 대상은 [`hyve.toml`](hyve.toml)의 `[serge] api_proxy`이고 `--api-proxy <URL>`로 바꿀 수 있습니다. 데스크톱 앱을 따로 띄운 백엔드에 붙이려면 `SERGE_API_URL=http://127.0.0.1:3000/v1 cargo run -p serge-playground`입니다. `cargo run -p serge-cli -- preview`(옵션 없음)는 웹과 데스크톱을 함께 띄웁니다.
+`/v1`은 백엔드로 프록시됩니다. 백엔드는 [`apps/serge-playground/Cargo.toml`](apps/serge-playground/Cargo.toml)의 `[package.metadata.orbic.server]`가 선언한 `playground-server`입니다. 소스를 저장하면 페이지는 다시 빌드되어 새로 고쳐지고, 백엔드는 다시 빌드되어 재기동됩니다. 백엔드 첫 빌드는 페이지보다 늦게 끝날 수 있어 그동안 `/v1` 호출은 `502`입니다. Ctrl-C로 모두 멈춥니다. 옵션 없이 `hyve preview`를 실행하면 같은 백엔드를 부르는 데스크톱 창도 함께 뜹니다. 레포를 갱신하면 도구도 다시 설치해야 합니다(`hyve`가 도구의 버전을 `Cargo.lock`과 맞춰 봅니다).
+
+웹 빌드에는 `rustup target add wasm32-unknown-unknown`과 `Cargo.lock`의 버전과 같은 `wasm-bindgen` CLI(`cargo install wasm-bindgen-cli --version =0.2.130`)가 필요합니다. 프록시 대상은 [`hyve.toml`](hyve.toml)의 `[serge] api_proxy`이고 `--api-proxy <URL>`로 바꿀 수 있습니다. 도구를 설치하지 않고 따로 띄우려면 터미널 두 개에서 `cargo run -p serge-playground --features server --bin playground-server`와 `cargo run -p serge-cli -- preview --web`을 실행합니다. 데스크톱 앱을 따로 띄운 백엔드에 붙이려면 `SERGE_API_URL=http://127.0.0.1:3000/v1 cargo run -p serge-playground`입니다.
 
 화면: 카운터, 할 일 목록(입력·체크박스·키 있는 목록), 프로젝트 편집기(로그인 가드 → 데모 로그인), 저장된 프로젝트(`#[server]` 호출·서버 검증 오류·느린 호출 취소), 실시간 텔레메트리(`SharedRingBuf` → `Canvas`).
 

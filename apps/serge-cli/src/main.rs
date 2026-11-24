@@ -16,12 +16,14 @@
 //! proxies the API prefix to an orbic server (`--api-proxy
 //! http://127.0.0.1:3000/v1`, or `api_proxy` in `hyve.toml`'s `[serge]`
 //! table: the URL's path is the proxied prefix), and rebuilds and reloads
-//! the page when sources change. `preview --native` runs the app's binary in a
-//! window; `preview` without either runs both. Exit codes: 0 success, 1
-//! failure, 2 usage.
+//! the page when sources change. `preview --native` builds the app's binary
+//! and runs it in a window; `preview` without either runs both. Under `hyve
+//! preview` (`HYVE_STAGE_LIFELINE=stdin`) the preview stops, window
+//! included, when stdin closes. Exit codes: 0 success, 1 failure, 2 usage.
 
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::{Child, Command, ExitCode, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use serge_web_dev::{BuildOptions, DevServer, Error, Proxy, Workspace};
@@ -44,7 +46,7 @@ impl From<Error> for Fail {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Opts {
     web: bool,
     native: bool,
@@ -189,33 +191,105 @@ fn preview(args: &[String]) -> Result<(), Fail> {
             "choose `--web` or `--native` (neither runs both)".into(),
         )),
         (false, true) => {
-            let status = native_command(&o)?.status().map_err(|e| {
+            let window = Window::default();
+            window.lifeline();
+            window.start(native_app(&o)?).map_err(|e| {
                 Fail::Error(Error {
-                    message: format!("could not run cargo: {e}"),
+                    message: format!("the app could not start: {e}"),
                     hint: None,
                 })
             })?;
-            if status.success() {
-                Ok(())
-            } else {
-                Err(Fail::Error(Error {
+            match window.wait() {
+                Some(status) if !status.success() => Err(Fail::Error(Error {
                     message: format!("the app exited with {status}"),
                     hint: None,
-                }))
+                })),
+                _ => Ok(()),
             }
         }
         (true, false) => preview_web(&o, None),
         // Neither: every target of the app — the window next to the page.
-        (false, false) => {
-            let native = native_command(&o)?;
-            preview_web(&o, Some(native))
+        (false, false) => preview_web(&o, Some(())),
+    }
+}
+
+/// The native window this tool started, if any. Under `hyve preview`
+/// (`HYVE_STAGE_LIFELINE=stdin`) it is stopped, and the tool exits, when
+/// stdin closes (`hyve/docs/01-dx-and-dsl.md` §2). Starting and stopping
+/// hold the same lock, so a window never starts after the stop.
+#[derive(Clone, Default)]
+struct Window(Arc<Mutex<(Option<Child>, bool)>>);
+
+impl Window {
+    fn lifeline(&self) {
+        if std::env::var("HYVE_STAGE_LIFELINE").as_deref() != Ok("stdin") {
+            return;
+        }
+        let window = self.clone();
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut sink = [0u8; 256];
+            let mut stdin = std::io::stdin();
+            while matches!(stdin.read(&mut sink), Ok(n) if n > 0) {}
+            let mut w = window.0.lock().unwrap_or_else(|e| e.into_inner());
+            w.1 = true;
+            if let Some(mut c) = w.0.take() {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+            std::process::exit(0);
+        });
+    }
+
+    /// Starts the window unless the tool is stopping.
+    fn start(&self, mut cmd: Command) -> std::io::Result<()> {
+        let mut w = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        if !w.1 {
+            w.0 = Some(cmd.spawn()?);
+        }
+        Ok(())
+    }
+
+    /// Waits for the window to close.
+    fn wait(&self) -> Option<std::process::ExitStatus> {
+        loop {
+            {
+                let mut w = self.0.lock().unwrap_or_else(|e| e.into_inner());
+                match w.0.as_mut().map(Child::try_wait) {
+                    Some(Ok(Some(status))) => return Some(status),
+                    Some(Ok(None)) => {}
+                    Some(Err(_)) | None => return None,
+                }
+            }
+            std::thread::sleep(Duration::from_millis(100));
         }
     }
 }
 
-/// `cargo run` of the app's native binary.
-fn native_command(o: &Opts) -> Result<Command, Fail> {
+/// Builds the app's native binary and returns the command that runs it
+/// directly (stopping it stops the app; `cargo run` would leave it behind).
+fn native_app(o: &Opts) -> Result<Command, Fail> {
     let ws = workspace()?;
+    let (bin, mut build) = native_build(&ws, o)?;
+    let status = build.status().map_err(|e| {
+        Fail::Error(Error {
+            message: format!("could not run cargo: {e}"),
+            hint: None,
+        })
+    })?;
+    if !status.success() {
+        return Err(Fail::Error(Error {
+            message: "the native build failed".into(),
+            hint: None,
+        }));
+    }
+    let mut cmd = Command::new(bin);
+    cmd.current_dir(&ws.root).stdin(Stdio::null());
+    Ok(cmd)
+}
+
+/// `cargo build` of the app's native binary, and where the binary lands.
+fn native_build(ws: &Workspace, o: &Opts) -> Result<(PathBuf, Command), Fail> {
     let app = ws.web_app(o.package.as_deref())?;
     let bin = if app.bins.contains(&app.name) {
         app.name.clone()
@@ -231,15 +305,20 @@ fn native_command(o: &Opts) -> Result<Command, Fail> {
         }));
     };
     let mut cmd = Command::new("cargo");
-    cmd.args(["run", "-p", &app.name, "--bin", &bin])
-        .current_dir(&ws.root);
+    cmd.args(["build", "-p", &app.name, "--bin", &bin])
+        .current_dir(&ws.root)
+        .stdin(Stdio::null());
     if o.release {
         cmd.arg("--release");
     }
     if !o.features.is_empty() {
         cmd.arg("--features").arg(o.features.join(","));
     }
-    Ok(cmd)
+    let path = ws
+        .target_dir
+        .join(if o.release { "release" } else { "debug" })
+        .join(format!("{bin}{}", std::env::consts::EXE_SUFFIX));
+    Ok((path, cmd))
 }
 
 /// A cheap fingerprint of the watched sources: newest mtime and file count.
@@ -267,7 +346,9 @@ fn sources_stamp(dirs: &[PathBuf]) -> (Option<SystemTime>, usize) {
     (newest, n)
 }
 
-fn preview_web(o: &Opts, mut native: Option<Command>) -> Result<(), Fail> {
+fn preview_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
+    let window = Window::default();
+    window.lifeline();
     let ws = workspace()?;
     let app = ws.web_app(o.package.as_deref())?.clone();
     let opts = BuildOptions {
@@ -312,19 +393,33 @@ fn preview_web(o: &Opts, mut native: Option<Command>) -> Result<(), Fail> {
     if let Some(p) = &proxy {
         eprintln!("hyve-serge: {}/* → http://{}", p.prefix, p.target);
     }
-    // The window starts once the page is served (its build waits for the
-    // web build's lock); the page keeps being served after it closes.
-    let _window = match native.as_mut().map(Command::spawn) {
-        Some(Ok(child)) => {
-            eprintln!("hyve-serge: building the native window next to the page");
-            Some(child)
-        }
-        Some(Err(e)) => {
-            eprintln!("hyve-serge: the native window could not start: {e}");
-            None
-        }
-        None => None,
-    };
+    // The window starts once the page is served (built in the background
+    // after the web build); the page keeps being served after it closes.
+    if native.is_some() {
+        eprintln!("hyve-serge: building the native window next to the page");
+        let (o, window) = (o.clone(), window.clone());
+        std::thread::spawn(move || {
+            match native_app(&o).and_then(|cmd| {
+                window.start(cmd).map_err(|e| {
+                    Fail::Error(Error {
+                        message: format!("{e}"),
+                        hint: None,
+                    })
+                })
+            }) {
+                Ok(()) => {}
+                Err(Fail::Error(e)) => {
+                    eprintln!(
+                        "hyve-serge: the native window could not start: {}",
+                        e.message
+                    )
+                }
+                Err(Fail::Usage(e)) => {
+                    eprintln!("hyve-serge: the native window could not start: {e}")
+                }
+            }
+        });
+    }
     if o.no_watch {
         eprintln!("hyve-serge: Ctrl-C stops");
         loop {

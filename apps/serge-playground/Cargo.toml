@@ -41,5 +41,11 @@ hyve = { workspace = true, features = ["test"] }
 [package.metadata.serge]
 web = true
 
+# `hyve preview` runs this server next to the page and restarts it when
+# its sources change (orbic `docs/01-dx-and-dsl.md` §3).
+[package.metadata.orbic.server]
+bin = "playground-server"
+features = ["server"]
+
 [lints]
 workspace = true
