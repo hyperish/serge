@@ -48,7 +48,7 @@
 - `orbic`의 `OrbicApp`과 대칭으로, UI 앱의 루트는 `SergeApp`입니다. `SergeApp::new()`에 `.provide()`로 앱 스코프 값을, `.feature()`로 `UiFeature`를 등록하고 `.run()`으로 실행합니다. `UiFeature`도 `.feature()`로 하위 기능을 가질 수 있습니다.
 - `.run()`은 컴파일 타깃에 따라 Web DOM에서는 문서에 마운트하고, Native에서는 창을 엽니다. 라우트가 없는 앱은 `.root(Component)`로 첫 화면을 지정합니다.
 - 원격 호출에 쓸 전송은 앱 루트에서 `.provide()`로 제공합니다(`03-adapters-and-pipeline.md` §2, `hyve/docs/03-adapters-and-pipeline.md` §3.2).
-- `RequireAuth` 같은 화면 가드는 앱 스코프의 세션 상태를 읽어 진입을 막거나 이동시킬 뿐이며, 서버의 권한 검사를 대신하지 않습니다.
+- `RequireAuth`가 읽는 것은 `serge-router`가 정의하는 `AuthState`(인증 여부를 담은 시그널)입니다. 앱이 루트에서 `.provide()`로 제공하고 로그인·로그아웃 때 갱신합니다. 제공하지 않고 `RequireAuth`를 쓰면 조립 시점 오류입니다. 화면 가드는 진입을 막거나 이동시킬 뿐이며, 서버의 권한 검사를 대신하지 않습니다.
 
 ### 확정 문법 기준 예시 (컴포넌트 조립 · `ui!` · 인라인 서버 함수 · Shm Ring Buffer · Live Activity)
 
