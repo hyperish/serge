@@ -13,5 +13,8 @@ parley.workspace = true
 serge-core.workspace = true
 serge-style.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+fontique = { workspace = true, features = ["fontconfig-dlopen"] }
+
 [lints]
 workspace = true

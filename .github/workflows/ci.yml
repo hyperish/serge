@@ -2,26 +2,161 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
     branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
+  # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
+  MSRV: "1.94"
+  # Must match `wasm-bindgen` in Cargo.lock.
+  WASM_BINDGEN_VERSION: "0.2.130"
+  # hyve and orbic are not published yet: the workspace depends on `../hyve`
+  # and `../orbic` with exact versions (hyperish/docs 05-development-rules.md
+  # §5), so CI checks them out next to serge. Switch to the registry once
+  # their `0.1.0-alpha.N` prereleases are published.
+  HYVE_REF: feat/phase1
+  ORBIC_REF: feat/phase1
 
 jobs:
   check:
-    name: Format, Clippy & Test
+    name: Format, Clippy & Test (stable)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: serge
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      # The CPU snapshot tests need a system font; the CLI test bundles the
+      # playground for the web.
+      - name: Install a font and the wasm-bindgen CLI
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends fonts-dejavu-core
+          cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo clippy -p serge-playground --features server --all-targets --locked -- -D warnings
+          cargo clippy -p serge -p serge-web-dom -p serge-adapter-client -p serge-playground --target wasm32-unknown-unknown --all-targets --locked -- -D warnings
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
+      # The playground's `server` feature: remote calls against a real orbic
+      # server on loopback, the app end to end in process.
+      - name: Test with the server feature
+        run: cargo test -p serge-playground --features server --locked
+
+  browser:
+    name: Web target in headless Chrome
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: serge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      - name: Install the wasm-bindgen test runner
+        run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
+      # The runner image ships Chrome with a matching chromedriver.
+      - name: Run the DOM tests
+        run: CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" cargo test --target wasm32-unknown-unknown -p serge --test web --locked
+
+  msrv:
+    name: Build on the declared minimum Rust version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: serge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      - name: Check (native)
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo check -p serge-playground --features server --all-targets --locked
+      - name: Check (wasm32)
+        run: cargo check -p serge -p serge-playground --target wasm32-unknown-unknown --locked
+
+  macos:
+    name: Desktop build and tests (macOS)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: serge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      - name: Native tests
+        run: cargo test -p serge -p serge-native -p serge-native-text -p serge-native-layout -p serge-native-cpu -p serge-platform-desktop --locked

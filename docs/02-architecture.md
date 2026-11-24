@@ -75,7 +75,7 @@ serge/
 
 - `serge-native-layout`: `taffy` `=0.15.1` (확인 시점의 최신 `0.16.0`은 공개 하루째라 보류).
 - `serge-native-cpu`: `vello_cpu` `=0.4.0`. 글리프도 `vello_cpu`가 `parley`의 폰트 데이터로 그리므로 `swash`는 쓰지 않습니다(확정의 실행 방식을 바꿈).
-- `serge-native-text`: `parley` `=0.13.0`.
+- `serge-native-text`: `parley` `=0.13.0`. Linux에서는 `fontique` `=0.13.0`의 `fontconfig-dlopen`을 켜 fontconfig를 실행 시점에 불러오므로 빌드에 개발 패키지·`pkg-config`가 필요 없습니다.
 - `serge-web-dom`: `tachys`는 레퍼런스로만 보고 직접 구현합니다. 포크 방향이 내부를 다시 쓰는 것이고 `tachys`는 `reactive_graph`에 묶여 있어 `hyve-state`와 맞지 않습니다(확정의 실행 방식을 바꿈).
 - `serge-platform-desktop`: `winit` `=0.30.13`(표의 `0.31.0-beta.4` 대신 안정판), CPU 프레임 표시에 `softbuffer` `=0.4.8`(새 외부 의존성, `MIT OR Apache-2.0`). GPU 경로(`wgpu` `30.0.2`)는 **미완**이라 자동 선택은 CPU이고, `HYPERISH_RENDER_BACKEND=gpu`는 오류입니다.
 - 매크로: `syn` `2.0.119`(표의 `3.0.10` 대신. 생태계의 `quote`·`proc-macro2`와 맞춤).

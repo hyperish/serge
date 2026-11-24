@@ -37,6 +37,9 @@ orbic = { path = "../orbic/crates/orbic", version = "=0.1.0-alpha.0", default-fe
 taffy = { version = "=0.15.1", default-features = false, features = ["std", "flexbox", "block_layout", "taffy_tree"] }
 vello_cpu = { version = "=0.4.0", default-features = false }
 parley = { version = "=0.13.0" }
+# parley's font discovery; only to load fontconfig at run time on Linux
+# (no development package or pkg-config needed to build).
+fontique = { version = "=0.13.0", default-features = false }
 winit = { version = "=0.30.13" }
 softbuffer = { version = "=0.4.8" }
 

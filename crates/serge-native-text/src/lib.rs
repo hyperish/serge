@@ -3,6 +3,9 @@
 //! system fonts and fallback (CJK included). Shaped runs become
 //! [`ScenePrimitive::Glyphs`]; renderers rasterize the glyph outlines.
 
+// Linux: fontconfig is loaded at run time (see Cargo.toml).
+#[cfg(target_os = "linux")]
+use fontique as _;
 use std::collections::HashMap;
 use std::sync::Arc;
 
