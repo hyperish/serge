@@ -1,10 +1,11 @@
 //! `serge-platform-desktop` — a desktop window for a serge UI: `winit`
 //! (external dependency, `docs/02-architecture.md` §3) for the window and
 //! input, the native runtime for layout and events, and a renderer chosen by
-//! the fallback policy (`docs/03-adapters-and-pipeline.md` §1.2). Phase 1
-//! presents CPU frames with `softbuffer`; the GPU renderer is not in this
-//! build yet, so automatic selection uses the CPU and an explicit
-//! `HYPERISH_RENDER_BACKEND=gpu` is an error.
+//! the fallback policy (`docs/03-adapters-and-pipeline.md` §1.2): the GPU
+//! (`serge-native-gpu`) when a surface and device can be created, else CPU
+//! frames (`serge-native-cpu`) presented with `softbuffer`.
+//! `HYPERISH_RENDER_BACKEND=cpu|gpu` picks one explicitly; an explicit `gpu`
+//! that fails is an error.
 
 use std::num::NonZeroU32;
 use std::rc::Rc;
@@ -13,8 +14,9 @@ use std::time::{Duration, Instant};
 
 use hyve::Scope;
 use serge_core::{Cursor, Element};
-use serge_native::{Backend, Key, LocalExecutor, Ui, choose_backend};
-use serge_native_cpu::CpuRenderer;
+use serge_native::{Backend, Key, LocalExecutor, Ui, choose_backend, requested_backend};
+use serge_native_cpu::{CpuRenderer, Frame};
+use serge_native_gpu::GpuSurface;
 use serge_style::Theme;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition};
@@ -68,9 +70,22 @@ enum Wake {
     Tasks,
 }
 
+/// How a window's frames reach the screen: one presenter per window.
+enum Presenter {
+    Gpu(Box<GpuSurface>),
+    Cpu(Box<CpuPresenter>),
+}
+
+/// CPU frames copied into a `softbuffer` surface.
+struct CpuPresenter {
+    surface: softbuffer::Surface<Arc<Window>, Arc<Window>>,
+    renderer: CpuRenderer,
+    buffer: Vec<u32>,
+}
+
 struct Window_ {
     window: Arc<Window>,
-    surface: softbuffer::Surface<Arc<Window>, Arc<Window>>,
+    presenter: Presenter,
     ui: Ui,
 }
 
@@ -80,12 +95,29 @@ struct App<F> {
     root: Option<F>,
     exec: LocalExecutor,
     win: Option<Window_>,
-    renderer: CpuRenderer,
+    requested: Option<String>,
     pointer: (f32, f32),
-    buffer: Vec<u32>,
     error: Option<DesktopError>,
     reported: bool,
     debug_frame: Option<std::path::PathBuf>,
+}
+
+/// Reports a presentation problem once per window.
+fn report_once(reported: &mut bool, what: std::fmt::Arguments<'_>) {
+    if !*reported {
+        eprintln!("serge: {what}");
+        *reported = true;
+    }
+}
+
+/// `SERGE_DEBUG_FRAME=<file.ppm>`: the frame just presented, as pixels (to
+/// inspect a window where screenshots are not allowed).
+fn write_debug_frame(path: &std::path::Path, frame: &Frame) {
+    let mut out = format!("P6\n{} {}\n255\n", frame.width, frame.height).into_bytes();
+    for p in frame.rgba.as_chunks::<4>().0 {
+        out.extend_from_slice(&p[..3]);
+    }
+    let _ = std::fs::write(path, out);
 }
 
 fn named(key: &WKey) -> Option<Key> {
@@ -112,47 +144,63 @@ impl<F: FnOnce() -> Element> App<F> {
         let (pw, ph) = (size.width.max(1), size.height.max(1));
         w.ui.resize(pw as f32 / scale, ph as f32 / scale);
         let scene = w.ui.frame();
-        let frame = self.renderer.render(
-            &scene,
-            pw.min(u32::from(u16::MAX)) as u16,
-            ph.min(u32::from(u16::MAX)) as u16,
-            scale,
-        );
-        frame.to_xrgb(&mut self.buffer);
-        let (Some(nw), Some(nh)) = (
-            NonZeroU32::new(u32::from(frame.width)),
-            NonZeroU32::new(u32::from(frame.height)),
-        ) else {
-            return;
-        };
-        if w.surface.resize(nw, nh).is_err() {
-            return;
-        }
-        match w.surface.buffer_mut() {
-            Ok(mut buf) => {
-                let n = buf.len().min(self.buffer.len());
-                buf[..n].copy_from_slice(&self.buffer[..n]);
-                if let Err(e) = buf.present()
-                    && !self.reported
-                {
-                    eprintln!("serge: presenting the frame failed: {e}");
-                    self.reported = true;
+        let debug = self.debug_frame.as_deref();
+        match &mut w.presenter {
+            Presenter::Gpu(surface) => match surface.render(&scene, pw, ph, scale, debug.is_some())
+            {
+                Ok(Some(frame)) => {
+                    if let Some(path) = debug {
+                        write_debug_frame(path, &frame);
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => report_once(
+                    &mut self.reported,
+                    format_args!("the GPU frame failed: {e}"),
+                ),
+            },
+            Presenter::Cpu(cpu) => {
+                let CpuPresenter {
+                    surface,
+                    renderer,
+                    buffer,
+                } = &mut **cpu;
+                let frame = renderer.render(
+                    &scene,
+                    pw.min(u32::from(u16::MAX)) as u16,
+                    ph.min(u32::from(u16::MAX)) as u16,
+                    scale,
+                );
+                frame.to_xrgb(buffer);
+                let (Some(nw), Some(nh)) = (
+                    NonZeroU32::new(u32::from(frame.width)),
+                    NonZeroU32::new(u32::from(frame.height)),
+                ) else {
+                    return;
+                };
+                if surface.resize(nw, nh).is_err() {
+                    return;
+                }
+                match surface.buffer_mut() {
+                    Ok(mut buf) => {
+                        let n = buf.len().min(buffer.len());
+                        buf[..n].copy_from_slice(&buffer[..n]);
+                        if let Err(e) = buf.present() {
+                            report_once(
+                                &mut self.reported,
+                                format_args!("presenting the frame failed: {e}"),
+                            );
+                        }
+                    }
+                    Err(e) => report_once(
+                        &mut self.reported,
+                        format_args!("no frame buffer for the window: {e}"),
+                    ),
+                }
+                if let Some(path) = debug {
+                    write_debug_frame(path, &frame);
                 }
             }
-            Err(e) if !self.reported => {
-                eprintln!("serge: no frame buffer for the window: {e}");
-                self.reported = true;
-            }
-            Err(_) => {}
-        }
-        // `SERGE_DEBUG_FRAME=<file.ppm>`: the frame just presented, as
-        // pixels (to inspect a window where screenshots are not allowed).
-        if let Some(path) = &self.debug_frame {
-            let mut out = format!("P6\n{} {}\n255\n", frame.width, frame.height).into_bytes();
-            for p in frame.rgba.as_chunks::<4>().0 {
-                out.extend_from_slice(&p[..3]);
-            }
-            let _ = std::fs::write(path, out);
         }
     }
 
@@ -188,12 +236,51 @@ impl<F: FnOnce() -> Element> ApplicationHandler<Wake> for App<F> {
             }
         };
         window.set_ime_allowed(true);
-        let surface = softbuffer::Context::new(window.clone())
-            .and_then(|ctx| softbuffer::Surface::new(&ctx, window.clone()));
-        let surface = match surface {
-            Ok(s) => s,
+        // The fallback policy, with the real surface and device.
+        let size = window.inner_size();
+        let (mut gpu, mut gpu_error) = (None, None);
+        let backend = choose_backend(self.requested.as_deref(), false, || {
+            match GpuSurface::new(window.clone(), size.width, size.height) {
+                Ok(s) => {
+                    gpu = Some(s);
+                    Ok(())
+                }
+                Err(e) => {
+                    gpu_error = Some(e.to_string());
+                    Err(e.to_string())
+                }
+            }
+        });
+        let presenter = match backend {
+            Ok(Backend::Gpu) => {
+                let surface = gpu.take().expect("the GPU surface was created");
+                eprintln!("serge: rendering on the GPU ({})", surface.adapter());
+                Presenter::Gpu(Box::new(surface))
+            }
+            Ok(Backend::Cpu) => {
+                let surface = softbuffer::Context::new(window.clone())
+                    .and_then(|ctx| softbuffer::Surface::new(&ctx, window.clone()));
+                match surface {
+                    Ok(surface) => {
+                        match gpu_error {
+                            Some(e) => eprintln!("serge: rendering on the CPU (no GPU: {e})"),
+                            None => eprintln!("serge: rendering on the CPU"),
+                        }
+                        Presenter::Cpu(Box::new(CpuPresenter {
+                            surface,
+                            renderer: CpuRenderer::new(),
+                            buffer: Vec::new(),
+                        }))
+                    }
+                    Err(e) => {
+                        self.error = Some(DesktopError::Platform(e.to_string()));
+                        el.exit();
+                        return;
+                    }
+                }
+            }
             Err(e) => {
-                self.error = Some(DesktopError::Platform(e.to_string()));
+                self.error = Some(DesktopError::Backend(e));
                 el.exit();
                 return;
             }
@@ -214,7 +301,7 @@ impl<F: FnOnce() -> Element> ApplicationHandler<Wake> for App<F> {
         window.request_redraw();
         self.win = Some(Window_ {
             window,
-            surface,
+            presenter,
             ui,
         });
     }
@@ -237,7 +324,9 @@ impl<F: FnOnce() -> Element> ApplicationHandler<Wake> for App<F> {
                 self.redraw();
                 return;
             }
-            WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+            WindowEvent::Resized(_)
+            | WindowEvent::ScaleFactorChanged { .. }
+            | WindowEvent::Occluded(false) => {
                 w.window.request_redraw();
                 return;
             }
@@ -311,14 +400,10 @@ pub fn run(
     scope: Scope,
     root: impl FnOnce() -> Element,
 ) -> Result<(), DesktopError> {
+    // A misspelled value fails before a window opens; the GPU is tried
+    // once the window exists.
     let requested = std::env::var("HYPERISH_RENDER_BACKEND").ok();
-    match choose_backend(requested.as_deref(), false, || {
-        Err("the GPU renderer is not in this build yet".to_string())
-    }) {
-        Ok(Backend::Cpu) => {}
-        Ok(Backend::Gpu) => unreachable!("the GPU path reports unavailable"),
-        Err(e) => return Err(DesktopError::Backend(e)),
-    }
+    requested_backend(requested.as_deref()).map_err(DesktopError::Backend)?;
     let el = EventLoop::<Wake>::with_user_event()
         .build()
         .map_err(|e| DesktopError::Platform(e.to_string()))?;
@@ -335,9 +420,8 @@ pub fn run(
         root: Some(root),
         exec,
         win: None,
-        renderer: CpuRenderer::new(),
+        requested,
         pointer: (0.0, 0.0),
-        buffer: Vec::new(),
         error: None,
         reported: false,
         debug_frame: std::env::var_os("SERGE_DEBUG_FRAME").map(Into::into),

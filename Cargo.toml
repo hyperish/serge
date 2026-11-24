@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground", "crates/serge-web-dev", "apps/serge-cli"]
+members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-native-gpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground", "crates/serge-web-dev", "apps/serge-cli"]
 resolver = "3"
 
 [workspace.package]
@@ -20,6 +20,7 @@ serge-core = { path = "crates/serge-core", version = "=0.1.0-alpha.0" }
 serge-macros = { path = "crates/serge-macros", version = "=0.1.0-alpha.0" }
 serge-native = { path = "crates/serge-native", version = "=0.1.0-alpha.0" }
 serge-native-cpu = { path = "crates/serge-native-cpu", version = "=0.1.0-alpha.0" }
+serge-native-gpu = { path = "crates/serge-native-gpu", version = "=0.1.0-alpha.0" }
 serge-native-layout = { path = "crates/serge-native-layout", version = "=0.1.0-alpha.0" }
 serge-native-text = { path = "crates/serge-native-text", version = "=0.1.0-alpha.0" }
 serge-platform-desktop = { path = "crates/serge-platform-desktop", version = "=0.1.0-alpha.0" }
@@ -42,6 +43,8 @@ parley = { version = "=0.13.0" }
 fontique = { version = "=0.13.0", default-features = false }
 winit = { version = "=0.30.13" }
 softbuffer = { version = "=0.4.8" }
+# Native backends only (Metal, Vulkan, DX12); WGSL shaders.
+wgpu = { version = "=30.0.2", default-features = false, features = ["std", "wgsl", "metal", "vulkan", "dx12"] }
 
 # External dependencies (not forked).
 wasm-bindgen = "=0.2.130"

@@ -47,12 +47,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: serge
-      # The CPU snapshot tests need a system font; the CLI test bundles the
+      # The CPU snapshot tests need a system font; the GPU parity tests run
+      # on Mesa's software Vulkan (lavapipe); the CLI test bundles the
       # playground for the web.
-      - name: Install a font and the wasm-bindgen CLI
+      - name: Install a font, software Vulkan and the wasm-bindgen CLI
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq --no-install-recommends fonts-dejavu-core
+          sudo apt-get install -yq --no-install-recommends fonts-dejavu-core mesa-vulkan-drivers
           cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -61,12 +62,18 @@ jobs:
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo clippy -p serge-playground --features server --all-targets --locked -- -D warnings
           cargo clippy -p serge -p serge-web-dom -p serge-adapter-client -p serge-playground --target wasm32-unknown-unknown --all-targets --locked -- -D warnings
+      # GPU checks fail instead of skipping when no adapter is found.
       - name: Run tests
         run: cargo test --workspace --locked
+        env:
+          HYPERISH_TEST_GPU: require
       # The playground's `server` feature: remote calls against a real orbic
-      # server on loopback, the app end to end in process.
+      # server on loopback, the app end to end in process, every screen on
+      # the GPU and the CPU.
       - name: Test with the server feature
         run: cargo test -p serge-playground --features server --locked
+        env:
+          HYPERISH_TEST_GPU: require
 
   browser:
     name: Web target in headless Chrome
@@ -158,5 +165,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: serge
+      # Metal: the GPU parity tests must find an adapter.
       - name: Native tests
-        run: cargo test -p serge -p serge-native -p serge-native-text -p serge-native-layout -p serge-native-cpu -p serge-platform-desktop --locked
+        run: cargo test -p serge -p serge-native -p serge-native-text -p serge-native-layout -p serge-native-cpu -p serge-native-gpu -p serge-platform-desktop --locked
+        env:
+          HYPERISH_TEST_GPU: require

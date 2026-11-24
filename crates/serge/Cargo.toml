@@ -25,6 +25,7 @@ serge-web-dom.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 serge-native.workspace = true
 serge-native-cpu.workspace = true
+serge-native-gpu.workspace = true
 serge-platform-desktop.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

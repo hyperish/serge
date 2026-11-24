@@ -73,6 +73,17 @@ impl std::fmt::Display for BackendError {
 
 impl std::error::Error for BackendError {}
 
+/// The backend `requested` (`HYPERISH_RENDER_BACKEND`) names: `None` when
+/// unset or empty, an error when it names neither `cpu` nor `gpu`.
+pub fn requested_backend(requested: Option<&str>) -> Result<Option<Backend>, BackendError> {
+    match requested.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(None),
+        Some(v) if v.eq_ignore_ascii_case("cpu") => Ok(Some(Backend::Cpu)),
+        Some(v) if v.eq_ignore_ascii_case("gpu") => Ok(Some(Backend::Gpu)),
+        Some(v) => Err(BackendError::Unknown(v.to_owned())),
+    }
+}
+
 /// The fallback policy as a pure function: an explicit `requested` value
 /// (`HYPERISH_RENDER_BACKEND`) always wins and an explicit `gpu` that fails
 /// is an error; without one, headless runs use the CPU and windows try the
@@ -82,12 +93,11 @@ pub fn choose_backend(
     headless: bool,
     gpu: impl FnOnce() -> Result<(), String>,
 ) -> Result<Backend, BackendError> {
-    match requested.map(str::trim).filter(|v| !v.is_empty()) {
-        Some(v) if v.eq_ignore_ascii_case("cpu") => Ok(Backend::Cpu),
-        Some(v) if v.eq_ignore_ascii_case("gpu") => gpu()
+    match requested_backend(requested)? {
+        Some(Backend::Cpu) => Ok(Backend::Cpu),
+        Some(Backend::Gpu) => gpu()
             .map(|()| Backend::Gpu)
             .map_err(BackendError::GpuUnavailable),
-        Some(v) => Err(BackendError::Unknown(v.to_owned())),
         None if headless => Ok(Backend::Cpu),
         None => Ok(gpu().map_or(Backend::Cpu, |()| Backend::Gpu)),
     }

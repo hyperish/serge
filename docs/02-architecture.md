@@ -77,7 +77,8 @@ serge/
 - `serge-native-cpu`: `vello_cpu` `=0.4.0`. 글리프도 `vello_cpu`가 `parley`의 폰트 데이터로 그리므로 `swash`는 쓰지 않습니다(확정의 실행 방식을 바꿈).
 - `serge-native-text`: `parley` `=0.13.0`. Linux에서는 `fontique` `=0.13.0`의 `fontconfig-dlopen`을 켜 fontconfig를 실행 시점에 불러오므로 빌드에 개발 패키지·`pkg-config`가 필요 없습니다.
 - `serge-web-dom`: `tachys`는 레퍼런스로만 보고 직접 구현합니다. 포크 방향이 내부를 다시 쓰는 것이고 `tachys`는 `reactive_graph`에 묶여 있어 `hyve-state`와 맞지 않습니다(확정의 실행 방식을 바꿈).
-- `serge-platform-desktop`: `winit` `=0.30.13`(표의 `0.31.0-beta.4` 대신 안정판), CPU 프레임 표시에 `softbuffer` `=0.4.8`(새 외부 의존성, `MIT OR Apache-2.0`). GPU 경로(`wgpu` `30.0.2`)는 **미완**이라 자동 선택은 CPU이고, `HYPERISH_RENDER_BACKEND=gpu`는 오류입니다.
+- `serge-platform-desktop`: `winit` `=0.30.13`(표의 `0.31.0-beta.4` 대신 안정판), CPU 프레임 표시에 `softbuffer` `=0.4.8`(새 외부 의존성, `MIT OR Apache-2.0`). 창을 만든 뒤 폴백 정책대로 GPU 표면·디바이스를 만들어 보고, 실패하면 CPU로 그립니다.
+- `serge-native-gpu`: `wgpu` `=30.0.2`(`metal`·`vulkan`·`dx12`·`wgsl`만, 기본 기능 끔). 표의 `vello` `0.12.0`은 Phase 2 이후라 아직 쓰지 않습니다. 글리프와 경로의 커버리지 마스크는 `swash`가 아니라 CPU 경로와 같은 `vello_cpu`가 만듭니다(`serge-native-cpu`의 `MaskRasterizer`). 같은 래스터라이저라 두 경로의 글자가 같게 나오고 새 의존성이 없습니다. 구조와 허용 오차는 `03-adapters-and-pipeline.md` §1.2에 있습니다.
 - 매크로: `syn` `2.0.119`(표의 `3.0.10` 대신. 생태계의 `quote`·`proc-macro2`와 맞춤).
 - 원격 전송(네이티브): `hyper` `=1.12.0`, `hyper-util` `=0.1.21`, `http-body-util` `=0.1.5`, `http` `=1.5.0`, `bytes` `=1.12.2`. 개발 도구: `serde_json` `=1.0.154`. 모두 `MIT` 또는 `MIT OR Apache-2.0`.
 - 최소 Rust 버전은 워크스페이스 전체 `1.94`입니다(쇼케이스가 링크하는 `orbic`의 요구).

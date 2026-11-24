@@ -71,6 +71,7 @@ pub use serge_style::{Color, Layout, Length, Theme, pct, px, rem};
 pub mod testing {
     pub use serge_native::{Headless, Key};
     pub use serge_native_cpu::{CpuRenderer, Frame};
+    pub use serge_native_gpu::{GpuRenderer, Parity, test_renderer as gpu_test_renderer};
 
     /// Writes `frame` as a binary PPM (any image viewer, `sips`, ImageMagick).
     pub fn write_ppm(frame: &Frame, path: &std::path::Path) -> std::io::Result<()> {

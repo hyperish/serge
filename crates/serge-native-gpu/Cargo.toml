@@ -1,0 +1,22 @@
+[package]
+name = "serge-native-gpu"
+description = "GPU renderer of serge's ScenePrimitive (wgpu): one instance buffer, one draw call per frame"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serge-core.workspace = true
+serge-native-cpu.workspace = true
+serge-native-text.workspace = true
+serge-style.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+serge-native.workspace = true
+
+[lints]
+workspace = true

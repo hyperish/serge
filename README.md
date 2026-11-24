@@ -57,7 +57,9 @@ cargo run -p serge-cli -- preview --web
 
 화면: 카운터, 할 일 목록(입력·체크박스·키 있는 목록), 프로젝트 편집기(로그인 가드 → 데모 로그인), 저장된 프로젝트(`#[server]` 호출·서버 검증 오류·느린 호출 취소), 실시간 텔레메트리(`SharedRingBuf` → `Canvas`).
 
-**프로토타입의 한계**: 네이티브는 CPU 렌더러만 있고 GPU 경로는 아직 없습니다. 웹은 템플릿 복제 없이 DOM을 만들고, 소스 변경 시 상태를 보존하지 않고 새로 고칩니다. 원격 전송은 평문 `http://`만 지원합니다. 진행 상황은 [`05-implementation-plan.md`](docs/05-implementation-plan.md) §4에 있습니다.
+**렌더러**: 데스크톱 창은 GPU(`wgpu`)를 먼저 쓰고, GPU를 쓸 수 없으면 CPU로 그립니다. 시작할 때 어느 쪽인지 한 줄 출력합니다. `HYPERISH_RENDER_BACKEND=cpu` 또는 `gpu`로 고를 수 있습니다(`gpu`를 골랐는데 실패하면 오류).
+
+**프로토타입의 한계**: 웹은 템플릿 복제 없이 DOM을 만들고, 소스 변경 시 상태를 보존하지 않고 새로 고칩니다. 원격 전송은 평문 `http://`만 지원합니다. 진행 상황은 [`05-implementation-plan.md`](docs/05-implementation-plan.md) §4에 있습니다.
 
 **테스트**:
 

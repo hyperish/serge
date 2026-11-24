@@ -194,11 +194,14 @@ fn telemetry_streams_into_the_canvas() {
 /// frames are written there (PPM) to look at.
 #[test]
 fn every_screen_renders() {
-    use serge::testing::{CpuRenderer, write_ppm};
+    use serge::testing::{CpuRenderer, Parity, gpu_test_renderer, write_ppm};
     let app = app(in_process()).assemble().unwrap();
     app.scope.get::<serge::AuthState>().unwrap().set(true);
     let h = Headless::with_scope(app.scope.clone(), 900.0, 640.0, move || app.element());
     let mut r = CpuRenderer::new();
+    // The GPU path draws every screen like the CPU path (renderer symmetry,
+    // `docs/03-adapters-and-pipeline.md` §1.2 tolerance), in one draw call.
+    let mut gpu = gpu_test_renderer();
     for (link, name) in [
         ("Home", "home"),
         ("Counter", "counter"),
@@ -209,9 +212,20 @@ fn every_screen_renders() {
     ] {
         h.click_text(link);
         h.wait_until(Duration::from_millis(300), |_| false);
-        let frame = r.render(&h.settle(), 1800, 1280, 2.0);
+        let scene = h.settle();
+        let frame = r.render(&scene, 1800, 1280, 2.0);
         let distinct: std::collections::HashSet<_> = frame.rgba.as_chunks::<4>().0.iter().collect();
         assert!(distinct.len() > 20, "{name} renders something");
+        if let Some(gpu) = gpu.as_mut() {
+            for (scale, w, h) in [(2.0, 1800, 1280), (1.0, 900, 640)] {
+                let cpu = r.render(&scene, w, h, scale);
+                let g = gpu.render(&scene, w, h, scale).expect("GPU frame");
+                let p = Parity::of(&cpu, &g);
+                eprintln!("{name} @{scale}x: {p:?}");
+                assert!(p.within_tolerance(), "{name} @{scale}x: {p:?}");
+                assert_eq!(gpu.stats().draw_calls, 1, "{name}: {:?}", gpu.stats());
+            }
+        }
         if let Ok(dir) = std::env::var("SERGE_SNAPSHOT_DIR") {
             write_ppm(
                 &frame,
