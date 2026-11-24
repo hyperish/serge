@@ -1,6 +1,6 @@
 # 03. 파이프라인과 호환 어댑터 (serge)
 
-> 상태: Web(Leptos형 DOM + Ionic형 UI + CRA급 데브 서버) 및 Native(GPUI/Rune형 GPU + 필수 CPU 폴백 · 데스크톱/iOS/Android · 자체 WebView 금지) 파이프라인 통합은 **확정**, 세부 동작은 **제안** · 기준일: 2026-11-19
+> 상태: Web(Leptos형 DOM + Ionic형 UI + CRA급 데브 서버) 및 Native(GPUI/Rune형 GPU + 필수 CPU 폴백 · 데스크톱/iOS/Android · 자체 WebView 금지) 파이프라인 통합은 **확정**, 세부 동작은 **제안** · 기준일: 2026-11-24
 
 `serge`는 하나의 공통 반응형 뷰 트리(`serge-core` + `hyve-state`)로부터 **Web(DOM) 렌더링 파이프라인**과 **Native(GPU/CPU) 렌더링 파이프라인** 두 갈래의 실행 경로를 제공합니다.
 
@@ -28,7 +28,7 @@
 | **Native 데스크톱 어댑터** | `serge-platform-desktop` | macOS/Windows/Linux 멀티 윈도우·네이티브 메뉴바/MenuBarExtra·트레이·단축키·VSync·IME·독/작업표시줄 진행률 연동 |
 | **Native iOS / Android 어댑터** | `serge-platform-ios`, `serge-platform-android` | `CADisplayLink`/`Choreographer` 프레임 동기화, Safe Area·키보드 회피, Android PiP·폴더블 힌지(Posture) 연동. **iOS Dynamic Island/WidgetKit(`#[ios::live_activity]`) 및 Android 위젯/Ongoing Notification**은 OS 제약상 커스텀 GPU 렌더링 대신 `hyve build` 시점의 정적 `ui!` 서브셋 → SwiftUI/Glance 코드젠 브리지로 동작 |
 | **Native HW · SW · Alert SDK** | `serge-native-sys` | `serge::hw`(센서 링 버퍼/시그널, 카메라 `ExternalTexture` 제로카피, 마이크 링 버퍼, 생체인증, 펜슬/햅틱, BLE) 및 `serge::sys`(OS 네이티브 Alert/ActionSheet/권한 팝업, 파일 피커, Keychain, 공유 시트, 백그라운드 태스크, `AccessKit` 접근성) |
-| **3-Tier 통신 어댑터** | `serge-adapter-client` | ① **Tier 1 인프로세스**(`SyncSignal` + Lock-Free `SharedRingBuf`), ② **Tier 2 로컬 IPC**(OS `shm`/`mmap` Shared Ring Buffer — `#[repr(C)]` POD·찢어짐 방지 스냅샷·App Group 샌드박스 준수 + Unix Socket/Named Pipe `hyve-serde` 바이너리 RPC), ③ **Tier 3 원격 서버**(Dual-Rail `hyve-serde`+WebTransport / HTTP+WS `?ticket=` 및 폴백 `seq` 연속 복구) 통합 실행 및 뷰 언마운트 시 구조적 취소 전파 |
+| **3-Tier 통신 어댑터** | `serge-adapter-client` | ① **Tier 1 인프로세스**(`Signal<T>` + Lock-Free `SharedRingBuf`), ② **Tier 2 로컬 IPC**(OS `shm`/`mmap` Shared Ring Buffer — `#[repr(C)]` POD·찢어짐 방지 스냅샷·App Group 샌드박스 준수 + Unix Socket/Named Pipe `hyve-serde` 바이너리 RPC), ③ **Tier 3 원격 서버**(Dual-Rail: 고속 레일은 `hyve-serde` 바이너리를 HTTP 본문·WebTransport로 나르고 차단 시 같은 프레임을 WS로 운반, 표준 레일은 HTTP/JSON+WS. `?ticket=` 핸드셰이크 및 폴백 `seq` 연속 복구) 통합 실행 및 뷰 언마운트 시 구조적 취소 전파 |
 | **옵트인 웹뷰 어댑터** | `serge-adapter-webview` | 네이티브 UI는 기본적으로 웹뷰를 절대 쓰지 않으나, 네이티브 앱 일부 슬롯에 웹 화면을 띄워야 할 때 **같은 레포의 `serge-web-dom` 산출물을 네이티브 웹뷰 서피스로 마운트하고 `hyve-serde` IPC로 상태를 동기화하는 내부 옵트인 어댑터** |
 | **프로덕션 웹 서빙 접점** | `orbic::orbic-adapter-serge` | `serge` 웹 타깃의 프로덕션 서빙 및 SSR 호스팅은 `orbic`이 담당 (§3 참조) |
 
