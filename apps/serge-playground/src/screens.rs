@@ -354,7 +354,8 @@ pub fn SavedProjects(store: Ctx<ProjectDraftStore>) -> Element {
 /// One engine sample (`#[repr(C)]` POD, what an engine thread or a shared
 /// memory ring would carry).
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serge::bytemuck::Pod, serge::bytemuck::Zeroable)]
+#[bytemuck(crate = "serge::bytemuck")]
 pub struct FrameMetrics {
     pub frame_ms: f32,
 }

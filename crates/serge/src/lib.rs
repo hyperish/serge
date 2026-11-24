@@ -17,6 +17,9 @@
 //! }
 //! ```
 
+/// `#[derive(Pod, Zeroable)]` for [`SharedRingBuf`] samples, with
+/// `#[bytemuck(crate = "serge::bytemuck")]`.
+pub use hyve::bytemuck;
 pub use serge_adapter_client::{RemoteTransport, SharedRingBuf};
 /// The `tokio` runtime native UI tasks and remote transports run on.
 #[cfg(not(target_arch = "wasm32"))]

@@ -8,8 +8,9 @@
 //!   the call's token is cancelled) the request is aborted. Native targets
 //!   use `hyper` on serge's `tokio` runtime, the web uses `fetch` with an
 //!   `AbortController`.
-//! - [`SharedRingBuf`] is a bounded buffer an engine thread pushes into and
-//!   a `Canvas` paint reads; reading it in `paint` repaints on new data.
+//! - [`SharedRingBuf`] is a lock-free ring of POD samples (`hyve`'s) an
+//!   engine thread pushes into and a `Canvas` paint reads; reading it in
+//!   `paint` repaints on new data.
 
 mod ring;
 
