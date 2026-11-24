@@ -48,6 +48,8 @@ fn targets_link_only_their_stack() {
             "wgpu",
             "tokio",
             "hyper",
+            "rustls",
+            "ring",
             "serge-native",
             "serge-platform-desktop",
         ],

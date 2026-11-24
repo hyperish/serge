@@ -6,8 +6,10 @@
 //!   the standard (JSON) rail on `415`; errors come back as the same
 //!   `HyveError`s the server returned; when the calling view unmounts (or
 //!   the call's token is cancelled) the request is aborted. Native targets
-//!   use `hyper` on serge's `tokio` runtime, the web uses `fetch` with an
-//!   `AbortController`.
+//!   use `hyper` on serge's `tokio` runtime (`https://` through `rustls`
+//!   with the `ring` provider, verified by the operating system unless
+//!   [`RemoteTransport::root_certificates`] pins the roots), the web uses
+//!   `fetch` with an `AbortController`.
 //! - [`SharedRingBuf`] is a lock-free ring of POD samples (`hyve`'s) an
 //!   engine thread pushes into and a `Canvas` paint reads; reading it in
 //!   `paint` repaints on new data.
@@ -26,8 +28,8 @@ use hyve::{CancellationToken, HyveResult};
 pub use ring::SharedRingBuf;
 
 /// `#[server]` calls over HTTP to a server whose functions are mounted at
-/// `base` (`http://127.0.0.1:3000/v1`; on the web also a same-origin path
-/// such as `/v1`).
+/// `base` (`https://api.example.com/v1`, `http://127.0.0.1:3000/v1`; on the
+/// web also a same-origin path such as `/v1`).
 #[derive(Clone)]
 pub struct RemoteTransport {
     origin: String,
@@ -36,10 +38,99 @@ pub struct RemoteTransport {
     headers: Vec<(String, String)>,
     fingerprint: Option<u64>,
     #[cfg(not(target_arch = "wasm32"))]
-    client: hyper_util::client::legacy::Client<
-        hyper_util::client::legacy::connect::HttpConnector,
-        http_body_util::Full<bytes::Bytes>,
-    >,
+    client: native::Client,
+}
+
+/// The native HTTP clients: plain, or TLS through `rustls`.
+#[cfg(not(target_arch = "wasm32"))]
+mod native {
+    use std::sync::Arc;
+
+    use hyper_util::client::legacy::connect::HttpConnector;
+
+    type Body = http_body_util::Full<bytes::Bytes>;
+    type Legacy<C> = hyper_util::client::legacy::Client<C, Body>;
+
+    #[derive(Clone)]
+    pub(crate) enum Client {
+        Plain(Legacy<HttpConnector>),
+        Tls(Legacy<hyper_rustls::HttpsConnector<HttpConnector>>),
+        /// TLS could not be set up; every call fails with this.
+        Broken(String),
+    }
+
+    fn builder() -> hyper_util::client::legacy::Builder {
+        hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+    }
+
+    pub(crate) fn plain() -> Client {
+        Client::Plain(builder().build_http())
+    }
+
+    /// An `https://` client. `roots` (PEM text) are the only trusted
+    /// roots; without them the operating system verifies the server.
+    pub(crate) fn tls(roots: Option<&str>) -> Client {
+        match config(roots) {
+            Ok(config) => Client::Tls(
+                builder().build(
+                    hyper_rustls::HttpsConnectorBuilder::new()
+                        .with_tls_config(config)
+                        .https_only()
+                        .enable_http1()
+                        .build(),
+                ),
+            ),
+            Err(e) => Client::Broken(e),
+        }
+    }
+
+    /// The `ring` provider is passed explicitly: the process-wide default
+    /// is never consulted (it panics when an app links two providers).
+    fn config(roots: Option<&str>) -> Result<rustls::ClientConfig, String> {
+        use rustls::pki_types::CertificateDer;
+        use rustls::pki_types::pem::PemObject;
+        use rustls_platform_verifier::BuilderVerifierExt;
+
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let builder = rustls::ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("TLS setup: {e}"))?;
+        let builder = match roots {
+            None => builder
+                .with_platform_verifier()
+                .map_err(|e| format!("the system's certificate verifier: {e}"))?,
+            Some(pem) => {
+                let mut store = rustls::RootCertStore::empty();
+                for cert in CertificateDer::pem_slice_iter(pem.as_bytes()) {
+                    let cert = cert.map_err(|e| format!("root certificates: {e}"))?;
+                    store
+                        .add(cert)
+                        .map_err(|e| format!("root certificate: {e}"))?;
+                }
+                if store.is_empty() {
+                    return Err("root certificates: no certificate in the PEM text".into());
+                }
+                builder.with_root_certificates(store)
+            }
+        };
+        Ok(builder.with_no_client_auth())
+    }
+
+    /// An error with its causes (`client error (Connect): invalid peer
+    /// certificate: UnknownIssuer`).
+    pub(crate) fn chain(e: &dyn std::error::Error) -> String {
+        let mut s = e.to_string();
+        let mut cause = e.source();
+        while let Some(c) = cause {
+            let text = c.to_string();
+            if !s.contains(&text) {
+                s.push_str(": ");
+                s.push_str(&text);
+            }
+            cause = c.source();
+        }
+        s
+    }
 }
 
 impl std::fmt::Debug for RemoteTransport {
@@ -67,17 +158,26 @@ fn split_base(base: &str) -> (String, String) {
 impl RemoteTransport {
     /// Calls functions mounted at `base`.
     ///
+    /// On native targets an `https://` server is verified by the operating
+    /// system's trust store (or only by [`root_certificates`](Self::root_certificates));
+    /// `http://` never touches TLS.
+    ///
     /// # Panics
     ///
-    /// On native targets, panics unless `base` is an absolute `http://` URL
-    /// (TLS is not in the Phase 1 prototype).
+    /// On native targets, panics unless `base` is an absolute `http://` or
+    /// `https://` URL.
     pub fn new(base: &str) -> RemoteTransport {
         let (origin, prefix) = split_base(base);
         #[cfg(not(target_arch = "wasm32"))]
-        assert!(
-            origin.starts_with("http://"),
-            "serge: RemoteTransport needs an absolute http:// URL on native targets, got {base:?}"
-        );
+        let client = if origin.starts_with("https://") {
+            native::tls(None)
+        } else if origin.starts_with("http://") {
+            native::plain()
+        } else {
+            panic!(
+                "serge: RemoteTransport needs an absolute http:// or https:// URL on native targets, got {base:?}"
+            )
+        };
         RemoteTransport {
             origin,
             prefix,
@@ -85,11 +185,31 @@ impl RemoteTransport {
             headers: Vec::new(),
             fingerprint: None,
             #[cfg(not(target_arch = "wasm32"))]
-            client: hyper_util::client::legacy::Client::builder(
-                hyper_util::rt::TokioExecutor::new(),
-            )
-            .build_http(),
+            client,
         }
+    }
+
+    /// Trusts exactly the CA certificates in `pem` (PEM text, one or more)
+    /// for an `https://` server instead of the operating system's trust
+    /// store: a development server's own CA. Invalid PEM makes every call
+    /// fail with the reason. No effect on `http://`, nor on the web, where
+    /// the browser decides.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn root_certificates(mut self, pem: &str) -> Self {
+        if self.origin.starts_with("https://") {
+            self.client = native::tls(Some(pem));
+        }
+        self
+    }
+
+    /// Trusts exactly the CA certificates in `pem` (PEM text, one or more)
+    /// for an `https://` server instead of the operating system's trust
+    /// store: a development server's own CA. Invalid PEM makes every call
+    /// fail with the reason. No effect on `http://`, nor on the web, where
+    /// the browser decides.
+    #[cfg(target_arch = "wasm32")]
+    pub fn root_certificates(self, _pem: &str) -> Self {
+        self
     }
 
     /// Sends every call on `rail` (default: fast, falling back on `415`).
@@ -207,11 +327,22 @@ impl RemoteTransport {
         let request = b
             .body(http_body_util::Full::new(bytes::Bytes::from(req.body)))
             .map_err(|e| errors::transport_unavailable(format!("invalid request: {e}")))?;
+        if let native::Client::Broken(e) = &self.client {
+            return Err(errors::transport_unavailable(format!(
+                "{}: {e}",
+                self.origin
+            )));
+        }
         let client = self.client.clone();
         // The I/O runs on serge's runtime; the guard aborts it when this
         // future is dropped (the view unmounted) or cancelled.
         let task = serge_core::runtime().spawn(async move {
-            let r = client.request(request).await.map_err(|e| e.to_string())?;
+            let r = match &client {
+                native::Client::Plain(c) => c.request(request).await,
+                native::Client::Tls(c) => c.request(request).await,
+                native::Client::Broken(e) => return Err(e.clone()),
+            }
+            .map_err(|e| native::chain(&e))?;
             let status = r.status().as_u16();
             let content_type = r
                 .headers()

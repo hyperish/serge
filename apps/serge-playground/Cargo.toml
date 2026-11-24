@@ -38,6 +38,13 @@ tokio = { workspace = true, optional = true, features = ["macros", "net", "rt-mu
 [dev-dependencies]
 hyve = { workspace = true, features = ["test"] }
 
+# The TLS front of `tests/tls.rs`.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+rcgen.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
+tokio = { workspace = true, features = ["io-util", "net", "rt", "time"] }
+
 [package.metadata.serge]
 web = true
 
