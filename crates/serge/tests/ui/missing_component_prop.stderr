@@ -1,0 +1,61 @@
+error[E0277]: `Greeting` needs the property `name`
+  --> tests/ui/missing_component_prop.rs:10:19
+   |
+10 |     let _ = ui! { Greeting { } };
+   |                   ^^^^^^^^ add `name` to this `Greeting { .. }`
+   |
+   = help: the trait `__Greeting_needs_name` is not implemented for `serge::__private::Unset`
+help: the trait `serge::__private::Build` is conditionally implemented for `Greeting<__P0, __P1>`
+  --> tests/ui/missing_component_prop.rs:3:1
+   |
+ 3 | #[component]
+   | ^^^^^^^^^^^^
+ 4 | fn Greeting(name: String, waved: Callback) -> Element {
+   |    --------
+   |    |
+   |    unsatisfied requirement introduced here: `serge::__private::Unset: __Greeting_needs_name`
+   |    unsatisfied requirement introduced here: `serge::__private::Unset: __Greeting_needs_waved`
+note: required for `Greeting` to implement `serge::__private::Build`
+  --> tests/ui/missing_component_prop.rs:3:1
+   |
+ 3 | #[component]
+   | ^^^^^^^^^^^^
+ 4 | fn Greeting(name: String, waved: Callback) -> Element {
+   |    -------- unsatisfied trait bound introduced here
+note: required by a bound in `serge::__private::element`
+  --> $WORKSPACE/crates/serge-core/src/builder.rs
+   |
+   | pub fn element<B: Build, F: FnOnce() -> B + Clone + 'static>(f: F) -> Element {
+   |                   ^^^^^ required by this bound in `element`
+   = note: this error originates in the attribute macro `component` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Greeting` needs the event `waved` (`waved => { .. }`)
+  --> tests/ui/missing_component_prop.rs:10:19
+   |
+10 |     let _ = ui! { Greeting { } };
+   |                   ^^^^^^^^ add `waved` to this `Greeting { .. }`
+   |
+   = help: the trait `__Greeting_needs_waved` is not implemented for `serge::__private::Unset`
+help: the trait `serge::__private::Build` is conditionally implemented for `Greeting<__P0, __P1>`
+  --> tests/ui/missing_component_prop.rs:3:1
+   |
+ 3 | #[component]
+   | ^^^^^^^^^^^^
+ 4 | fn Greeting(name: String, waved: Callback) -> Element {
+   |    --------
+   |    |
+   |    unsatisfied requirement introduced here: `serge::__private::Unset: __Greeting_needs_name`
+   |    unsatisfied requirement introduced here: `serge::__private::Unset: __Greeting_needs_waved`
+note: required for `Greeting` to implement `serge::__private::Build`
+  --> tests/ui/missing_component_prop.rs:3:1
+   |
+ 3 | #[component]
+   | ^^^^^^^^^^^^
+ 4 | fn Greeting(name: String, waved: Callback) -> Element {
+   |    -------- unsatisfied trait bound introduced here
+note: required by a bound in `serge::__private::element`
+  --> $WORKSPACE/crates/serge-core/src/builder.rs
+   |
+   | pub fn element<B: Build, F: FnOnce() -> B + Clone + 'static>(f: F) -> Element {
+   |                   ^^^^^ required by this bound in `element`
+   = note: this error originates in the attribute macro `component` (in Nightly builds, run with -Z macro-backtrace for more info)

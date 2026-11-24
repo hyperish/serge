@@ -1,0 +1,5 @@
+error: expected a widget (`Card { .. }`), `if`, `for` or `{expr}`
+ --> tests/ui/stray_tokens.rs:4:39
+  |
+4 |     let _ = ui! { Card { Text { "a" } ; } };
+  |                                       ^

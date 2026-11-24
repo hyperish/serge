@@ -1,0 +1,5 @@
+error: expected a pattern after `for`: `for item in items() { key: item.id, .. }`
+ --> tests/ui/broken_for.rs:4:26
+  |
+4 |     let _ = ui! { Card { for in 0..3 { key: 1, Text { "a" } } } };
+  |                          ^^^

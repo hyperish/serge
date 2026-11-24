@@ -1,0 +1,5 @@
+error: expected a condition after `if`
+ --> tests/ui/broken_if.rs:4:26
+  |
+4 |     let _ = ui! { Card { if { Text { "a" } } } };
+  |                          ^^

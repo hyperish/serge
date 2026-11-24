@@ -25,10 +25,31 @@ pub trait IntoProp<T> {
     fn into_prop(self) -> crate::element::Prop<T>;
 }
 
+/// A builder that takes child elements: built-in containers and components
+/// with a `children: Element` argument.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` takes no child elements",
+    label = "this widget takes no children",
+    note = "containers (`View`, `Stack`, `Card`) and components with a `children: Element` argument take children"
+)]
+pub trait Children: Sized {
+    /// Appends a child.
+    fn __child(self, child: Element) -> Self;
+}
+
+/// A child in `ui!`: `Card { Text { .. } }`.
+pub fn child<B: Children>(builder: B, child: Element) -> B {
+    builder.__child(child)
+}
+
 /// A value a property of type `T` takes: `T` itself, or a string slice for
 /// `String`. Deliberately narrower than `Into`, so that unsuffixed literals
 /// take the property's type (`font_weight: 700` is a `u16`, `grow: 1.0` an
 /// `f32`) instead of defaulting to `i32`/`f64`.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a value for this property, which takes `{T}`",
+    label = "expected a `{T}` value"
+)]
 pub trait PropValue<T> {
     /// The value.
     fn into_value(self) -> T;

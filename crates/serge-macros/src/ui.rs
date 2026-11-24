@@ -198,6 +198,12 @@ fn parse_node(c: &mut Cursor) -> Result<Node> {
         while !c.done() && !c.is_ident(0, "in") {
             pat.extend([c.next().expect("not done")]);
         }
+        if pat.is_empty() {
+            return Err(syn::Error::new(
+                at,
+                "expected a pattern after `for`: `for item in items() { key: item.id, .. }`",
+            ));
+        }
         if c.done() {
             return Err(syn::Error::new(
                 at,
@@ -255,6 +261,15 @@ fn parse_node(c: &mut Cursor) -> Result<Node> {
         return Err(syn::Error::new(
             at,
             "expected a widget (`Card { .. }`), `if`, `for` or `{expr}`",
+        ));
+    }
+    if c.is_punct_alone(0, ':') && path.to_string().contains("::") {
+        return Err(syn::Error::new(
+            at,
+            format!(
+                "`{}` is not a property: target attributes are `web::<name>` and `native::<name>`",
+                path.to_string().replace(' ', "")
+            ),
         ));
     }
     let body = c.brace("after the widget name (`Widget { .. }`)")?;
@@ -425,19 +440,41 @@ fn fragment(nodes: &[Node]) -> TokenStream {
     quote! { ::serge::__private::fragment(::std::vec![#(#parts),*]) }
 }
 
+/// Where a node starts (for diagnostics).
+fn node_span(n: &Node) -> Span {
+    match n {
+        Node::Widget { span, .. } | Node::For { span, .. } => *span,
+        Node::Text(lit) => lit.span(),
+        Node::Embed(_, span) => *span,
+        Node::If(_) => Span::call_site(),
+    }
+}
+
 fn node(n: &Node) -> TokenStream {
     match n {
         Node::Widget { path, span, items } => {
-            let mut chain = TokenStream::new();
-            for item in items {
-                chain.extend(item_call(item));
-            }
             let span = *span;
+            let mut acc = quote_spanned! {span=> <#path>::__new() };
+            for item in items {
+                acc = match item {
+                    // `child(builder, element)`: a builder without children
+                    // fails the `Children` bound with a readable message.
+                    Item::Child(n) if !matches!(n, Node::Text(_)) => {
+                        let e = node(n);
+                        let at = node_span(n);
+                        quote_spanned! {at=> ::serge::__private::child(#acc, #e) }
+                    }
+                    _ => {
+                        let call = item_call(item);
+                        quote! { #acc #call }
+                    }
+                };
+            }
             quote_spanned! {span=>
                 ::serge::__private::element(move || {
                     #[allow(unused_imports)]
                     use ::serge::__private::Styled as _;
-                    <#path>::__new() #chain
+                    #acc
                 })
             }
         }
@@ -514,7 +551,9 @@ fn item_call(item: &Item) -> TokenStream {
             body,
             is_async,
         } => {
-            let method = Ident::new(&format!("on_{name}"), name.span());
+            // The method is the event's own name, so rustc's "similar name"
+            // help for a typo suggests valid `ui!` syntax.
+            let method = name.clone();
             let body = if *is_async {
                 quote! { { ::serge::__private::spawn(#body); } }
             } else {
@@ -526,10 +565,7 @@ fn item_call(item: &Item) -> TokenStream {
             let v = text_value(lit);
             quote_spanned! {lit.span()=> .__text(#v) }
         }
-        Item::Child(n) => {
-            let e = node(n);
-            quote! { .__child(#e) }
-        }
+        Item::Child(_) => unreachable!("children are folded in `node`"),
     }
 }
 
@@ -552,13 +588,44 @@ fn unit_literal(l: &Literal) -> Option<TokenStream> {
     Some(quote_spanned! {l.span()=> ::serge::__private::#f(#lit) })
 }
 
+/// A number with a suffix that is neither a unit nor a Rust numeric type
+/// (`2vw`): the unit it names.
+fn unknown_unit(l: &Literal) -> Option<String> {
+    let s = l.to_string();
+    if !s.starts_with(|c: char| c.is_ascii_digit())
+        || s.starts_with("0x")
+        || s.starts_with("0o")
+        || s.starts_with("0b")
+    {
+        return None;
+    }
+    let suffix = s.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == '_');
+    let exponent = suffix.starts_with(['e', 'E'])
+        && suffix[1..].starts_with(|c: char| c.is_ascii_digit() || c == '+' || c == '-');
+    const RUST: [&str; 14] = [
+        "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+        "f32", "f64",
+    ];
+    (!suffix.is_empty() && !exponent && !RUST.contains(&suffix) && !["px", "rem"].contains(&suffix))
+        .then(|| suffix.to_owned())
+}
+
 /// Rewrites unit literals anywhere in a property expression.
 fn rewrite_units(ts: TokenStream) -> TokenStream {
     ts.into_iter()
         .map(|t| match t {
             TokenTree::Literal(l) => match unit_literal(&l) {
                 Some(e) => TokenTree::Group(Group::new(Delimiter::Parenthesis, e)),
-                None => TokenTree::Literal(l),
+                None => match unknown_unit(&l) {
+                    Some(u) => {
+                        let msg = format!("unknown unit `{u}`: units are `px`, `rem` and `%`");
+                        TokenTree::Group(Group::new(
+                            Delimiter::Parenthesis,
+                            quote_spanned! {l.span()=> ::core::compile_error!(#msg) },
+                        ))
+                    }
+                    None => TokenTree::Literal(l),
+                },
             },
             TokenTree::Group(g) => {
                 let mut ng = Group::new(g.delimiter(), rewrite_units(g.stream()));
@@ -667,7 +734,7 @@ fn interpolate(lit: &LitStr) -> Result<Option<(String, Vec<TokenStream>)>> {
             }
             '{' => {
                 let start = i + 1;
-                let mut depth = 0i32;
+                let mut open: Vec<char> = Vec::new();
                 let mut j = start;
                 let mut in_str: Option<char> = None;
                 while j < chars.len() {
@@ -681,10 +748,21 @@ fn interpolate(lit: &LitStr) -> Result<Option<(String, Vec<TokenStream>)>> {
                     } else {
                         match ch {
                             '"' => in_str = Some('"'),
-                            '(' | '[' | '{' => depth += 1,
-                            ')' | ']' => depth -= 1,
-                            '}' if depth == 0 => break,
-                            '}' => depth -= 1,
+                            '(' | '[' | '{' => open.push(ch),
+                            ')' | ']' => {
+                                open.pop();
+                            }
+                            '}' if open.is_empty() => break,
+                            '}' if open.last() == Some(&'{') => {
+                                open.pop();
+                            }
+                            '}' => {
+                                let o = open.last().copied().unwrap_or('(');
+                                return Err(syn::Error::new(
+                                    lit.span(),
+                                    format!("`{o}` is not closed inside `{{..}}` in this text"),
+                                ));
+                            }
                             _ => {}
                         }
                     }

@@ -168,9 +168,8 @@ widgets! {
 
 macro_rules! containers {
     ($($name:ident),*) => {$(
-        impl $name {
-            #[doc(hidden)]
-            pub fn __child(mut self, child: Element) -> Self {
+        impl crate::builder::Children for $name {
+            fn __child(mut self, child: Element) -> Self {
                 self.0.children.push(child.0);
                 self
             }
@@ -220,7 +219,7 @@ impl Button {
     }
 
     /// `clicked => { .. }`.
-    pub fn on_clicked(mut self, f: impl FnOnce() + Clone + 'static) -> Self {
+    pub fn clicked(mut self, f: impl FnOnce() + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::Clicked(crate::builder::reuse0(f)));
@@ -252,7 +251,7 @@ impl Slider {
     }
 
     /// `changed(v) => { .. }`.
-    pub fn on_changed(mut self, f: impl FnOnce(f32) + Clone + 'static) -> Self {
+    pub fn changed(mut self, f: impl FnOnce(f32) + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::ChangedNum(crate::builder::reuse1(f)));
@@ -274,7 +273,7 @@ impl Input {
     }
 
     /// `changed(text) => { .. }` on every edit.
-    pub fn on_changed(mut self, f: impl FnOnce(String) + Clone + 'static) -> Self {
+    pub fn changed(mut self, f: impl FnOnce(String) + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::ChangedText(crate::builder::reuse1(f)));
@@ -282,7 +281,7 @@ impl Input {
     }
 
     /// `submitted => { .. }` on Enter.
-    pub fn on_submitted(mut self, f: impl FnOnce() + Clone + 'static) -> Self {
+    pub fn submitted(mut self, f: impl FnOnce() + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::Submitted(crate::builder::reuse0(f)));
@@ -304,7 +303,7 @@ impl Checkbox {
     }
 
     /// `changed(checked) => { .. }`.
-    pub fn on_changed(mut self, f: impl FnOnce(bool) + Clone + 'static) -> Self {
+    pub fn changed(mut self, f: impl FnOnce(bool) + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::ChangedBool(crate::builder::reuse1(f)));
@@ -315,7 +314,7 @@ impl Checkbox {
 impl Canvas {
     /// `paint(bounds, ctx) => { .. }`: runs again when the signals (or frame
     /// sources) it reads change and when the canvas is resized.
-    pub fn on_paint(mut self, f: impl FnOnce(Rect, &mut PaintCtx) + Clone + 'static) -> Self {
+    pub fn paint(mut self, f: impl FnOnce(Rect, &mut PaintCtx) + Clone + 'static) -> Self {
         self.0
             .handlers
             .push(Handler::Paint(Rc::new(move |b, ctx| (f.clone())(b, ctx))));

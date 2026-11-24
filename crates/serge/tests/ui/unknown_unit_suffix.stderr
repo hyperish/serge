@@ -1,0 +1,5 @@
+error: unknown unit `vw`: units are `px`, `rem` and `%`
+ --> tests/ui/unknown_unit_suffix.rs:4:35
+  |
+4 |     let _ = ui! { Card { padding: 2vw } };
+  |                                   ^^^

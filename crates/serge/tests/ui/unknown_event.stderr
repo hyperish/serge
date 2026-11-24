@@ -1,0 +1,10 @@
+error[E0599]: no method named `clicke` found for struct `serge::widgets::Button` in the current scope
+ --> tests/ui/unknown_event.rs:4:42
+  |
+4 |     let _ = ui! { Button { text: "Save", clicke => {} } };
+  |                                          ^^^^^^
+  |
+help: there is a method `clicked` with a similar name
+  |
+4 |     let _ = ui! { Button { text: "Save", clicked => {} } };
+  |                                                +

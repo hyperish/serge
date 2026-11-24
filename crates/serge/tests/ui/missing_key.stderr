@@ -1,0 +1,5 @@
+error: a `for` in `ui!` needs a key first: `for item in items() { key: item.id, .. }`
+ --> tests/ui/missing_key.rs:8:30
+  |
+8 |             for n in items() {
+  |                              ^

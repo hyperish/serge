@@ -152,6 +152,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let gen_params = quote! { #(#params),* };
 
     let mut methods = Vec::new();
+    let mut children_impl: Option<proc_macro2::Span> = None;
     for (i, (ident, ty, kind)) in args.iter().enumerate() {
         let field = format_ident!("{}", ident);
         let others: Vec<_> = moves.iter().filter(|m| **m != field).collect();
@@ -169,13 +170,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
         let span = ident.span();
         match kind {
             Arg::View => {}
-            Arg::Children => methods.push(quote_spanned! {span=>
-                #[doc(hidden)]
-                pub fn __child(mut self, child: ::serge::__private::Element) -> Self {
-                    self.children.push(child);
-                    self
-                }
-            }),
+            Arg::Children => children_impl = Some(span),
             Arg::Prop => {
                 let out = out_params(true);
                 methods.push(quote_spanned! {span=>
@@ -197,7 +192,7 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
                 }
             }),
             Arg::Event(a) | Arg::OptEvent(a) => {
-                let method = format_ident!("on_{}", ident, span = span);
+                let method = ident.clone();
                 let (bound, cb) = match a {
                     None => (
                         quote! { FnOnce() + ::core::clone::Clone + 'static },
@@ -270,6 +265,16 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     }
 
     let doc = format!("Builder for the `{name}` component in `ui!`.");
+    let children = children_impl.map(|span| {
+        quote_spanned! {span=>
+            impl<#gen_params> ::serge::__private::Children for #name<#gen_params> {
+                fn __child(mut self, child: ::serge::__private::Element) -> Self {
+                    self.children.push(child);
+                    self
+                }
+            }
+        }
+    });
     Ok(quote! {
         #[allow(non_snake_case)]
         #f
@@ -291,6 +296,8 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
         impl<#gen_params> #name<#gen_params> {
             #(#methods)*
         }
+
+        #children
 
         #(#needs)*
 

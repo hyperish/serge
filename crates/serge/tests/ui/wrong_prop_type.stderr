@@ -1,0 +1,23 @@
+error[E0277]: `&str` is not a value for this property, which takes `f32`
+ --> tests/ui/wrong_prop_type.rs:4:35
+  |
+4 |     let _ = ui! { Slider { value: "half" } };
+  |                            -----  ^^^^^^ expected a `f32` value
+  |                            |
+  |                            required by a bound introduced by this call
+  |
+help: the trait `PropValue<f32>` is not implemented for `&str`
+      but trait `PropValue<String>` is implemented for it
+ --> $WORKSPACE/crates/serge-core/src/builder.rs
+  |
+  | impl PropValue<String> for &str {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  = help: for that trait implementation, expected `String`, found `f32`
+  = note: required for `serge::__private::Lit<&str>` to implement `serge::__private::IntoProp<f32>`
+note: required by a bound in `serge::widgets::Slider::value`
+ --> $WORKSPACE/crates/serge-core/src/widgets.rs
+  |
+  | impl Slider {
+...
+  |     pub fn value(mut self, v: impl IntoProp<f32>) -> Self {
+  |                                    ^^^^^^^^^^^^^ required by this bound in `Slider::value`
