@@ -182,8 +182,13 @@ impl Kind {
 /// A property value: fixed, or recomputed (and re-applied) when the signals
 /// it reads change.
 pub enum Prop<T> {
-    /// Fixed.
+    /// Fixed for this widget (evaluated once; may differ between widgets
+    /// built at the same place, like `padding: gap`).
     Static(T),
+    /// A literal in the source (`padding: 16px`, `"Save"`): the same for
+    /// every widget built at the same place, so the web target bakes it
+    /// into that place's template.
+    Const(T),
     /// Recomputed reactively.
     Dynamic(Rc<dyn Fn() -> T>),
 }
@@ -192,7 +197,7 @@ impl<T: Clone + 'static> Prop<T> {
     /// The current value (tracked when called inside an effect).
     pub fn get(&self) -> T {
         match self {
-            Prop::Static(v) => v.clone(),
+            Prop::Static(v) | Prop::Const(v) => v.clone(),
             Prop::Dynamic(f) => f(),
         }
     }
@@ -201,6 +206,7 @@ impl<T: Clone + 'static> Prop<T> {
     pub fn map<U: 'static>(self, f: impl Fn(T) -> U + 'static) -> Prop<U> {
         match self {
             Prop::Static(v) => Prop::Static(f(v)),
+            Prop::Const(v) => Prop::Const(f(v)),
             Prop::Dynamic(g) => Prop::Dynamic(Rc::new(move || f(g()))),
         }
     }
@@ -209,14 +215,42 @@ impl<T: Clone + 'static> Prop<T> {
     pub fn is_dynamic(&self) -> bool {
         matches!(self, Prop::Dynamic(_))
     }
+
+    /// Whether the value is a source literal ([`Prop::Const`]).
+    pub fn is_const(&self) -> bool {
+        matches!(self, Prop::Const(_))
+    }
 }
 
 impl<T: Clone> Clone for Prop<T> {
     fn clone(&self) -> Self {
         match self {
             Prop::Static(v) => Prop::Static(v.clone()),
+            Prop::Const(v) => Prop::Const(v.clone()),
             Prop::Dynamic(f) => Prop::Dynamic(f.clone()),
         }
+    }
+}
+
+/// The place in the source a `ui!` widget was written (one `static` per
+/// widget node). Widgets built at the same place have the same shape and
+/// the same [`Prop::Const`] values; `parent` is the enclosing widget's place
+/// when this one is its direct child in the same `ui!`.
+#[derive(Debug)]
+pub struct Site {
+    /// The enclosing widget's place.
+    pub parent: Option<&'static Site>,
+}
+
+impl Site {
+    /// A place under `parent`.
+    pub const fn new(parent: Option<&'static Site>) -> Site {
+        Site { parent }
+    }
+
+    /// Whether `self` is a direct child written inside `parent`.
+    pub fn is_child_of(&self, parent: &Site) -> bool {
+        self.parent.is_some_and(|p| std::ptr::eq(p, parent))
     }
 }
 
@@ -328,6 +362,8 @@ pub struct Widget {
     pub cursor: Option<Cursor>,
     /// Children.
     pub children: Vec<Node>,
+    /// Where it was written in a `ui!` (none when built in code).
+    pub site: Option<&'static Site>,
 }
 
 impl Widget {
@@ -341,6 +377,7 @@ impl Widget {
             web: Vec::new(),
             cursor: None,
             children: Vec::new(),
+            site: None,
         }
     }
 

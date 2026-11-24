@@ -450,17 +450,39 @@ fn node_span(n: &Node) -> Span {
     }
 }
 
+/// A fresh name for a widget's place (`static`), unique per expansion.
+fn site_ident(span: Span) -> Ident {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    Ident::new(
+        &format!("__SERGE_SITE_{}", NEXT.fetch_add(1, Ordering::Relaxed)),
+        span,
+    )
+}
+
 fn node(n: &Node) -> TokenStream {
+    node_in(n, None)
+}
+
+/// A node; `parent` is the enclosing widget's place when `n` is its direct
+/// child (the web target clones the two as one template).
+fn node_in(n: &Node, parent: Option<&Ident>) -> TokenStream {
     match n {
         Node::Widget { path, span, items } => {
             let span = *span;
-            let mut acc = quote_spanned! {span=> <#path>::__new() };
+            let site = site_ident(span);
+            let parent = match parent {
+                Some(p) => quote! { ::core::option::Option::Some(&#p) },
+                None => quote! { ::core::option::Option::None },
+            };
+            let mut acc =
+                quote_spanned! {span=> ::serge::__private::site(<#path>::__new(), &#site) };
             for item in items {
                 acc = match item {
                     // `child(builder, element)`: a builder without children
                     // fails the `Children` bound with a readable message.
                     Item::Child(n) if !matches!(n, Node::Text(_)) => {
-                        let e = node(n);
+                        let e = node_in(n, Some(&site));
                         let at = node_span(n);
                         quote_spanned! {at=> ::serge::__private::child(#acc, #e) }
                     }
@@ -474,6 +496,7 @@ fn node(n: &Node) -> TokenStream {
                 ::serge::__private::element(move || {
                     #[allow(unused_imports)]
                     use ::serge::__private::Styled as _;
+                    static #site: ::serge::__private::Site = ::serge::__private::Site::new(#parent);
                     #acc
                 })
             }
@@ -651,11 +674,11 @@ fn prop_value(value: &TokenStream, span: Span) -> TokenStream {
     {
         let n: f64 = l.to_string().parse().unwrap_or(0.0);
         let lit = Literal::f32_suffixed(n as f32);
-        return quote_spanned! {span=> ::serge::__private::Lit(::serge::__private::pct(#lit)) };
+        return quote_spanned! {span=> ::serge::__private::Const(::serge::__private::pct(#lit)) };
     }
     if let [TokenTree::Literal(l)] = toks.as_slice() {
         if let Some(e) = unit_literal(l) {
-            return quote_spanned! {span=> ::serge::__private::Lit(#e) };
+            return quote_spanned! {span=> ::serge::__private::Const(#e) };
         }
         if is_str_lit(&toks[0])
             && let Ok(lit) = syn::parse2::<LitStr>(value.clone())
@@ -668,10 +691,28 @@ fn prop_value(value: &TokenStream, span: Span) -> TokenStream {
     // point at the value, and lints treat the closure as macro output.
     let span = Span::call_site().located_at(span);
     match syn::parse2::<Expr>(rewritten.clone()) {
+        Ok(e) if is_literal(&e) => quote_spanned! {span=> ::serge::__private::Const(#rewritten) },
         Ok(e) if is_fixed(&e) => quote_spanned! {span=> ::serge::__private::Lit(#rewritten) },
         Ok(_) => quote_spanned! {span=> ::serge::__private::Dyn(move || #rewritten) },
         // Let rustc report the expression's own error at its span.
         Err(_) => quote_spanned! {span=> ::serge::__private::Dyn(move || { #rewritten }) },
+    }
+}
+
+/// Literals only (`8`, `-1.5`, `true`, `0.0..=1.0`): the same value every
+/// time this place is built.
+fn is_literal(e: &Expr) -> bool {
+    match e {
+        Expr::Lit(_) => true,
+        Expr::Unary(u) => matches!(u.op, syn::UnOp::Neg(_)) && is_literal(&u.expr),
+        Expr::Range(r) => {
+            r.start.as_deref().is_none_or(is_literal) && r.end.as_deref().is_none_or(is_literal)
+        }
+        Expr::Paren(p) => is_literal(&p.expr),
+        Expr::Group(g) => is_literal(&g.expr),
+        Expr::Tuple(t) => t.elems.iter().all(is_literal),
+        Expr::Array(a) => a.elems.iter().all(is_literal),
+        _ => false,
     }
 }
 
@@ -697,7 +738,7 @@ fn is_fixed(e: &Expr) -> bool {
 fn text_value(lit: &LitStr) -> TokenStream {
     let span = Span::call_site().located_at(lit.span());
     match interpolate(lit) {
-        Ok(None) => quote_spanned! {span=> ::serge::__private::Lit(#lit) },
+        Ok(None) => quote_spanned! {span=> ::serge::__private::Const(#lit) },
         Ok(Some((fmt, args))) => {
             let fmt = LitStr::new(&fmt, span);
             quote_spanned! {span=> ::serge::__private::Dyn(move || ::std::format!(#fmt #(, #args)*)) }

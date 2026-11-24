@@ -14,7 +14,7 @@ pub mod widgets;
 
 pub use element::{
     Attr, AttrValue, Callback, Cursor, Element, Handler, IntoElement, Keyed, KeyedItem, Kind, Node,
-    PaintFn, Prop, Widget, key_hash,
+    PaintFn, Prop, Site, Widget, key_hash,
 };
 pub use nav::{navigate, set_navigator};
 pub use paint::{FontHandle, FrameSource, Glyph, PaintCmd, PaintCtx, Point, Rect, ScenePrimitive};

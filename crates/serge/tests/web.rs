@@ -376,3 +376,123 @@ async fn unmounting_a_view_aborts_its_fetch() {
         "unmounting aborted the in-flight fetch"
     );
 }
+
+#[derive(Clone, PartialEq)]
+struct Row {
+    id: u32,
+    name: String,
+    done: bool,
+}
+
+/// List items are clones of one template per place: creating a hundred rows
+/// creates no element per row, and every clone still gets its own text,
+/// per-row values written as variables, live input state and handlers.
+#[wasm_bindgen_test]
+fn list_items_are_cloned_from_templates() {
+    let root = container();
+    let rows = signal(
+        (0..100)
+            .map(|id| Row {
+                id,
+                name: format!("row {id}"),
+                done: id % 2 == 0,
+            })
+            .collect::<Vec<_>>(),
+    );
+    let clicked = signal(None::<u32>);
+    let m = mount(&root, Scope::root(), move || {
+        ui! {
+            Stack { gap: 4px,
+                for row in rows() { key: row.id,
+                    Card { padding: 8px, gap: 4px,
+                        Text { "{row.name}" }
+                        Checkbox { text: "Done", checked: row.done }
+                        Input { value: "draft", placeholder: "Note" }
+                        Button { text: "Pick", clicked => { clicked.set(Some(row.id)); } }
+                    }
+                }
+            }
+        }
+    });
+    let s = m.stats();
+    // The Stack, then the row template: Card, Text, Checkbox, Input, Button.
+    assert_eq!(s.templates, 2, "{s:?}");
+    assert_eq!(s.created, 6, "{s:?}");
+    assert_eq!(s.cloned, 101, "{s:?}");
+    let names = texts(&root, ".serge-text");
+    assert_eq!(names.len(), 100);
+    assert_eq!(names[7], "row 7");
+    let boxes = root.query_selector_all(".serge-checkbox input").unwrap();
+    let checked = |i: u32| -> bool {
+        boxes
+            .item(i)
+            .unwrap()
+            .unchecked_into::<HtmlInputElement>()
+            .checked()
+    };
+    assert!(checked(0) && !checked(1) && checked(2));
+    assert_eq!(texts(&root, ".serge-checkbox span")[3], "Done");
+    let inputs = root.query_selector_all(".serge-input").unwrap();
+    let input: HtmlInputElement = inputs.item(42).unwrap().unchecked_into();
+    assert_eq!(input.value(), "draft");
+    assert_eq!(input.placeholder(), "Note");
+    // Literal styles are in the template.
+    let card: HtmlElement = root
+        .query_selector(".serge-card")
+        .unwrap()
+        .unwrap()
+        .unchecked_into();
+    assert!(
+        card.get_attribute("style").unwrap().contains("padding"),
+        "{:?}",
+        card.get_attribute("style")
+    );
+    // Handlers are per clone.
+    let buttons = root.query_selector_all(".serge-button").unwrap();
+    buttons
+        .item(13)
+        .unwrap()
+        .unchecked_into::<HtmlElement>()
+        .click();
+    assert_eq!(clicked.get(), Some(13));
+    // New rows are clones too.
+    rows.update(|r| {
+        r.push(Row {
+            id: 100,
+            name: "row 100".into(),
+            done: false,
+        })
+    });
+    let s = m.stats();
+    assert_eq!((s.created, s.cloned), (6, 102), "{s:?}");
+    assert_eq!(texts(&root, ".serge-text").last().unwrap(), "row 100");
+    m.unmount();
+}
+
+/// Values written as variables differ between widgets built at the same
+/// place, so they are applied to each clone, not baked into the template.
+#[wasm_bindgen_test]
+fn per_instance_values_are_not_baked() {
+    let root = container();
+    let _m = mount(&root, Scope::root(), move || {
+        let item = |label: &'static str, pad: serge::Length| ui! { Card { padding: pad, Text { "{label}" } } };
+        ui! {
+            Stack {
+                {item("small", serge::px(2.0))}
+                {item("large", serge::px(30.0))}
+            }
+        }
+    });
+    let cards = root.query_selector_all(".serge-card").unwrap();
+    let style = |i| {
+        cards
+            .item(i)
+            .unwrap()
+            .unchecked_into::<DomElement>()
+            .get_attribute("style")
+            .unwrap()
+    };
+    assert!(style(0).contains("padding: 2px"), "{}", style(0));
+    assert!(style(1).contains("padding: 30px"), "{}", style(1));
+    assert_eq!(texts(&root, ".serge-text"), ["small", "large"]);
+}

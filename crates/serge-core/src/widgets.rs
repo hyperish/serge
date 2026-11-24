@@ -132,6 +132,13 @@ macro_rules! widgets {
             }
         }
 
+        impl crate::builder::Sited for $name {
+            fn __site(mut self, site: &'static crate::element::Site) -> Self {
+                self.0.site = Some(site);
+                self
+            }
+        }
+
         impl Build for $name {
             const REGION: bool = false;
             fn build(self) -> Element {

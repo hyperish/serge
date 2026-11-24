@@ -116,9 +116,10 @@ pub mod prelude {
 #[doc(hidden)]
 pub mod __private {
     pub use hyve::state::untrack;
+    pub use serge_core::Site;
     pub use serge_core::builder::{
-        Build, Children, Dyn, IntoArg, IntoProp, Lit, Set, Unset, child, element, fragment, keyed,
-        region,
+        Build, Children, Const, Dyn, IntoArg, IntoProp, Lit, Set, Sited, Unset, child, element,
+        fragment, keyed, region, site,
     };
     pub use serge_core::widgets::Styled;
     pub use serge_core::{Callback, Element, FromView, IntoElement, native, spawn, web};

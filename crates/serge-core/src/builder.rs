@@ -73,6 +73,36 @@ impl PropValue<String> for &String {
     }
 }
 
+/// A source literal in `ui!` (`16px`, `"Save"`, `true`): like [`Lit`], and
+/// the same wherever this place is built (see [`crate::element::Site`]).
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug)]
+pub struct Const<V>(pub V);
+
+impl<T, V: PropValue<T>> IntoProp<T> for Const<V> {
+    fn into_prop(self) -> crate::element::Prop<T> {
+        crate::element::Prop::Const(self.0.into_value())
+    }
+}
+
+impl<T, V: PropValue<T>> IntoArg<T> for Const<V> {
+    fn into_arg(self) -> T {
+        self.0.into_value()
+    }
+}
+
+/// A builder that records where it was written (built-in widgets; a
+/// component's builder ignores it — its own `ui!` has its own places).
+pub trait Sited: Sized {
+    /// Records the place.
+    fn __site(self, site: &'static crate::element::Site) -> Self;
+}
+
+/// The place of a widget in `ui!`.
+pub fn site<B: Sited>(builder: B, site: &'static crate::element::Site) -> B {
+    builder.__site(site)
+}
+
 impl<T, V: PropValue<T>> IntoProp<T> for Lit<V> {
     fn into_prop(self) -> crate::element::Prop<T> {
         crate::element::Prop::Static(self.0.into_value())

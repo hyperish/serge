@@ -52,9 +52,23 @@ SSR/SSG, 적응형 웹 UI, 영속 시그널, 데스크톱 시스템 API, 공유 
 | 2 `serge-macros` | 구현 | 문서 예시가 그대로 컴파일(`crates/serge/tests/macros.rs`). 오용 16가지(알 수 없는 위젯·프로퍼티·이벤트·네임스페이스·`web::` 속성·단위, 빠진 `key`·필수 프로퍼티, 자식을 받지 않는 컴포넌트, 타입 불일치, 깨진 값·`if`·`for`·보간·토큰)가 스팬이 붙은 오류로 끝남(`crates/serge/tests/diagnostics.rs`, 2026-11-25) |
 | 3 `serge-style` | 구현 | 토큰(밝은·어두운 테마), 스타일 IR, CSS 출력 |
 | 4 `serge-router` | 구현 | 가드 이동, 화면 전환 시 진행 중 호출 취소, 기능 스코프 유지, 조립 오류(`crates/serge/tests/app.rs`), 프로퍼티가 시그널을 읽는 컴포넌트의 재생성(`crates/serge/tests/native.rs`) |
-| 5 `serge-web-dom`, `serge-web-dev` | 구현, 템플릿 복제·HMR **미완** | 헤드리스 Chrome에서 DOM 테스트(`crates/serge/tests/web.rs`), 데브 서버 테스트, 실제 브라우저로 쇼케이스 전체 흐름(링크·뒤로 가기·입력·`#[server]`·캔버스·라이브 리로드) 확인 |
+| 5 `serge-web-dom`, `serge-web-dev` | 구현, HMR **미완** | 헤드리스 Chrome에서 DOM 테스트(`crates/serge/tests/web.rs`), 데브 서버 테스트, 실제 브라우저로 쇼케이스 전체 흐름(링크·뒤로 가기·입력·`#[server]`·캔버스·라이브 리로드) 확인. 템플릿 복제(2026-11-25): 자리마다 템플릿 하나, 목록 항목은 원소 생성 없이 복제되고 복제본마다 텍스트·위젯별 값·입력 상태·핸들러가 따로 적용됨(`list_items_are_cloned_from_templates`, `per_instance_values_are_not_baked`), 실제 브라우저 흐름 재확인 |
 | 6 네이티브 | CPU·GPU 경로 구현 | 헤드리스 런타임 테스트, 1×·2× CPU 스냅샷, 쇼케이스 전 화면 렌더. GPU 경로(2026-11-25): 모든 프리미티브·반투명·중첩 클립·글자 장면과 쇼케이스 6개 화면을 1×·2×로 GPU와 CPU에서 그려 §1.2 허용 오차 안(쇼케이스는 평균 차 0.03 이하, 32 초과 픽셀 0.006% 이하), 프레임당 드로우콜 1개(`crates/serge-native-gpu/tests/parity.rs`, `apps/serge-playground/tests/backend.rs`). 폴백 정책을 실제 디바이스 생성으로 확인(빌드에 없는 백엔드로 실패시킨 명시 `gpu`는 오류, 자동은 CPU). 실제 창을 열어 CPU 프레임과 GPU 표면·디바이스 생성까지 확인했으나, 화면에 표시된 GPU 픽셀과 화면 캡처·실제 입력은 **미검증**(실행 환경의 화면이 잠겨 창이 가려진 상태로 보고되고, 화면 기록·손쉬운 사용 권한이 없음). 120fps는 측정하지 않음(**미검증**) |
 | 7 `serge-adapter-client` | 구현, 락 없는 링·TLS **미완** | 루프백 `orbic::serve`에 원격 호출: 두 레일과 스키마 불일치 폴백에서 인프로세스와 같은 결과·같은 오류, 스코프 해제 시 취소(`apps/serge-playground/tests/backend.rs`). 웹은 뷰를 언마운트하면 진행 중 `fetch`가 중단됨(`crates/serge/tests/web.rs`) |
 | 8 `serge`, 쇼케이스, `hyve-serge` | 구현 | `hyve-serge stages`·`build`·`preview`, `hyve build --debug`가 실제 `hyve-serge`를 거쳐 웹 번들을 만듦. 의존 경계 테스트(`crates/serge/tests/deps.rs`) |
 
-§3 완료 기준 중 남은 것: 포크 검증 기록, 패키징(`hyve`·`orbic` 프리릴리스 뒤), 상태 보존 HMR(Phase 2). CI는 `feat/**` 브랜치 push에서 돌고, 리눅스는 소프트웨어 Vulkan(Mesa lavapipe), macOS는 Metal로 GPU 비교를 건너뛰지 않고 실행합니다(`HYPERISH_TEST_GPU=require`).
+§3 완료 기준 중 남은 것: 포크 검증(아래 기록은 달라진 점까지, 소스 편입과 원본 대비 측정은 **미완**), 패키징(`hyve`·`orbic` 프리릴리스 뒤), 상태 보존 HMR(Phase 2). CI는 `feat/**` 브랜치 push에서 돌고, 리눅스는 소프트웨어 Vulkan(Mesa lavapipe), macOS는 Metal로 GPU 비교를 건너뛰지 않고 실행합니다(`HYPERISH_TEST_GPU=require`).
+
+### 포크 기록 (2026-11-25)
+
+`hyperish/docs` `05-development-rules.md` §7의 8번 규칙에 따라, 소스를 편입하지 않은 포크는 검증을 충족한 것으로 보지 않습니다. 아래는 달라진 점의 기록이고, 원본 대비 측정은 **미완**입니다.
+
+| 대상 | 원본 | 달라진 점 |
+|---|---|---|
+| `taffy` | `0.15.1` 고정 의존 | 원본 그대로. 피처는 `std`·`flexbox`·`block_layout`·`taffy_tree` |
+| `parley`, `fontique` | `0.13.0` 고정 의존 | 원본 그대로. Linux에서는 fontconfig를 실행 시점에 불러옴(`fontconfig-dlopen`) |
+| `vello_cpu` | `0.4.0` 고정 의존 | 원본 그대로. 피처는 `std`·`text`·`u8_pipeline`. GPU 경로의 글리프·경로 마스크도 이것으로 만듦(`swash` 대신) |
+| `wgpu` | `30.0.2` 고정 의존 | 원본 그대로. 피처는 `std`·`wgsl`·`metal`·`vulkan`·`dx12` |
+| `winit` | `0.30.13` 고정 의존 | 원본 그대로(표의 `0.31.0-beta.4` 대신 안정판) |
+| `serge-web-dom` | `tachys` `0.3.0-rc1` 레퍼런스 | 자체 구현. 같은 점: 실제 DOM의 세밀 갱신, 템플릿 복제 뒤 동적 지점만 채움. 다른 점: `reactive_graph` 대신 `hyve-state`, 제네릭 튜플 뷰 타입 대신 런타임 위젯 트리와 자리(`Site`)별 템플릿, 골격을 컴파일 타임 문자열이 아니라 첫 마운트 때 만듦 |
+| `serge-native-gpu` | GPUI 아키텍처 레퍼런스(포크 금지) | 자체 구현. 같은 점: 인스턴스 버퍼 배칭, 글리프 아틀라스. 다른 점: 프레임당 파이프라인·드로우콜 하나(클립을 셰이더 커버리지로), 경로를 GPU 래스터화 대신 CPU 마스크로, 그림자·외부 텍스처 프리미티브 없음 |

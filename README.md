@@ -59,7 +59,7 @@ cargo run -p serge-cli -- preview --web
 
 **렌더러**: 데스크톱 창은 GPU(`wgpu`)를 먼저 쓰고, GPU를 쓸 수 없으면 CPU로 그립니다. 시작할 때 어느 쪽인지 한 줄 출력합니다. `HYPERISH_RENDER_BACKEND=cpu` 또는 `gpu`로 고를 수 있습니다(`gpu`를 골랐는데 실패하면 오류).
 
-**프로토타입의 한계**: 웹은 템플릿 복제 없이 DOM을 만들고, 소스 변경 시 상태를 보존하지 않고 새로 고칩니다. 원격 전송은 평문 `http://`만 지원합니다. 진행 상황은 [`05-implementation-plan.md`](docs/05-implementation-plan.md) §4에 있습니다.
+**프로토타입의 한계**: 웹은 소스 변경 시 상태를 보존하지 않고 새로 고칩니다. 원격 전송은 평문 `http://`만 지원합니다. 진행 상황은 [`05-implementation-plan.md`](docs/05-implementation-plan.md) §4에 있습니다.
 
 **테스트**:
 

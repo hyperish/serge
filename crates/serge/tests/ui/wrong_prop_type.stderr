@@ -13,7 +13,7 @@ help: the trait `PropValue<f32>` is not implemented for `&str`
   | impl PropValue<String> for &str {
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   = help: for that trait implementation, expected `String`, found `f32`
-  = note: required for `serge::__private::Lit<&str>` to implement `serge::__private::IntoProp<f32>`
+  = note: required for `serge::__private::Const<&str>` to implement `serge::__private::IntoProp<f32>`
 note: required by a bound in `serge::widgets::Slider::value`
  --> $WORKSPACE/crates/serge-core/src/widgets.rs
   |

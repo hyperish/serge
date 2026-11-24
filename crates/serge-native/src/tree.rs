@@ -311,6 +311,7 @@ fn mount_widget(ui: &Rc<Shared>, w: Widget, parent: usize, view: &View) {
         web: _,
         cursor,
         children,
+        site: _,
     } = w;
     let paint = handlers.iter().find_map(|h| match h {
         Handler::Paint(p) => Some(p.clone()),
@@ -347,7 +348,9 @@ fn mount_widget(ui: &Rc<Shared>, w: Widget, parent: usize, view: &View) {
 
     for (a, p) in attrs {
         match p {
-            Prop::Static(v) => ui.with(|t| t.node_mut(id).expect("alive").set_attr(a, v)),
+            Prop::Static(v) | Prop::Const(v) => {
+                ui.with(|t| t.node_mut(id).expect("alive").set_attr(a, v))
+            }
             Prop::Dynamic(f) => {
                 let (ui, v) = (ui.clone(), view.clone());
                 effect(move || {

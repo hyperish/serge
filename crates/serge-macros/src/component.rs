@@ -297,6 +297,14 @@ pub fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
             #(#methods)*
         }
 
+        // A component's own `ui!` records its places; the call site's
+        // place is not used.
+        impl<#gen_params> ::serge::__private::Sited for #name<#gen_params> {
+            fn __site(self, _: &'static ::serge::__private::Site) -> Self {
+                self
+            }
+        }
+
         #children
 
         #(#needs)*
