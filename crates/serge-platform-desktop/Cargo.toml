@@ -1,0 +1,21 @@
+[package]
+name = "serge-platform-desktop"
+description = "Desktop windows, input and presentation for serge (winit, softbuffer)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve.workspace = true
+serge-core.workspace = true
+serge-native.workspace = true
+serge-native-cpu.workspace = true
+serge-style.workspace = true
+softbuffer.workspace = true
+winit.workspace = true
+
+[lints]
+workspace = true

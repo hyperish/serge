@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
 description = "Interactive MVP showcase binary for serge Web DOM and Native GPU/CPU pipelines"
 

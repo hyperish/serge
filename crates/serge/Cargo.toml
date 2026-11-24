@@ -1,20 +1,30 @@
 [package]
 name = "serge"
-description = "Unified cross-platform Web DOM and Native GPU/CPU UI framework for the Hyperish family"
+description = "Unified cross-platform Web DOM and native UI framework of the Hyperish family"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
 readme = "../../README.md"
 keywords = ["hyperish", "ui", "gui", "wasm", "cross-platform"]
 categories = ["gui", "web-programming"]
 
 [dependencies]
-hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
-serge-macros = { path = "../serge-macros" }
+hyve.workspace = true
+serge-core.workspace = true
+serge-macros.workspace = true
+serge-router.workspace = true
+serge-style.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+serge-native.workspace = true
+serge-platform-desktop.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+serge-native-cpu.workspace = true
+tokio = { workspace = true, features = ["time"] }
 
 [lints]
 workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "serge-core"
+description = "View tree, widgets, events, PaintCtx/ScenePrimitive and view scopes of the serge UI framework"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve.workspace = true
+serge-style.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

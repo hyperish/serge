@@ -1,0 +1,19 @@
+[package]
+name = "serge-native"
+description = "Native runtime of serge: retained view tree, layout, scene collection, input and UI tasks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve.workspace = true
+serge-core.workspace = true
+serge-native-layout.workspace = true
+serge-native-text.workspace = true
+serge-style.workspace = true
+
+[lints]
+workspace = true

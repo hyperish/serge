@@ -1,0 +1,16 @@
+[package]
+name = "serge-router"
+description = "App assembly (SergeApp, feature()) and typed routing with guards for serge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve.workspace = true
+serge-core.workspace = true
+
+[lints]
+workspace = true

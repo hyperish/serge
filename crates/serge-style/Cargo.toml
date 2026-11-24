@@ -1,0 +1,12 @@
+[package]
+name = "serge-style"
+description = "Design tokens and the style/layout IR shared by serge's web and native targets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true

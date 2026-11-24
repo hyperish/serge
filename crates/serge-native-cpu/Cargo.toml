@@ -1,0 +1,22 @@
+[package]
+name = "serge-native-cpu"
+description = "CPU renderer of serge's ScenePrimitive (vello_cpu), the mandatory fallback"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serge-core.workspace = true
+serge-native-text.workspace = true
+serge-style.workspace = true
+vello_cpu = { workspace = true, features = ["std", "text", "u8_pipeline"] }
+
+[dev-dependencies]
+serge-native.workspace = true
+serge-native-layout.workspace = true
+
+[lints]
+workspace = true
