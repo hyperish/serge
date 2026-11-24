@@ -90,18 +90,28 @@ fn preview_stops_when_hyve_closes_its_stdin() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    // Read stderr until the tool exits (a closed pipe would fail its
+    // later prints); the served address comes over a channel.
     let err = BufReader::new(child.stderr.take().unwrap());
-    let mut said = String::new();
-    let mut addr = None;
-    for line in err.lines().map_while(Result::ok) {
-        said.push_str(&line);
-        said.push('\n');
-        if let Some(rest) = line.split(" at http://").nth(1) {
-            addr = Some(rest.trim_end_matches('/').to_owned());
-            break;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut said = String::new();
+        for line in err.lines().map_while(Result::ok) {
+            if let Some(rest) = line.split(" at http://").nth(1) {
+                let _ = tx.send(rest.trim_end_matches('/').to_owned());
+            }
+            said.push_str(&line);
+            said.push('\n');
         }
-    }
-    let addr = addr.unwrap_or_else(|| panic!("never served:\n{said}"));
+        said
+    });
+    let addr = match rx.recv_timeout(Duration::from_secs(600)) {
+        Ok(addr) => addr,
+        Err(_) => {
+            let _ = child.kill();
+            panic!("never served:\n{}", reader.join().unwrap());
+        }
+    };
     assert!(std::net::TcpStream::connect(&addr).is_ok());
 
     drop(child.stdin.take());
@@ -113,9 +123,36 @@ fn preview_stops_when_hyve_closes_its_stdin() {
         assert!(Instant::now() < deadline, "the preview did not stop");
         std::thread::sleep(Duration::from_millis(50));
     };
-    assert!(status.success(), "{status}");
+    let said = reader.join().unwrap();
+    assert!(status.success(), "{status}\n{said}");
     assert!(
         std::net::TcpStream::connect(&addr).is_err(),
         "{addr} still served"
     );
+}
+
+/// `preview` is offered only where there is an app to preview.
+#[test]
+fn preview_is_offered_only_with_an_app() {
+    let dir = std::env::temp_dir().join(format!("serge-cli-noapp-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"lib-only\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_hyve-serge"))
+        .arg("stages")
+        .current_dir(&dir)
+        .env("CARGO_NET_OFFLINE", "true")
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert_eq!(
+        text.lines().collect::<Vec<_>>(),
+        [env!("CARGO_PKG_VERSION"), "build"]
+    );
+    let _ = std::fs::remove_dir_all(dir);
 }

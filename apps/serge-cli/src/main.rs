@@ -10,7 +10,7 @@
 //! ```
 //!
 //! `stages` answers `hyve` (first line: serge's version, then one stage per
-//! line). `build` bundles every web app (`[package.metadata.serge] web =
+//! line; `preview` only when the workspace has an app). `build` bundles every web app (`[package.metadata.serge] web =
 //! true`) for the browser into `target/serge/<package>/`, release unless
 //! `--debug`. `preview --web` builds the app, serves it with SPA fallback,
 //! proxies the API prefix to an orbic server (`--api-proxy
@@ -32,8 +32,6 @@ const USAGE: &str = "usage:
   hyve-serge stages
   hyve-serge build [--debug] [-p <package>] [--features <a,b>] [--out <dir>]
   hyve-serge preview [--web | --native] [-p <package>] [--port <n>] [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]";
-
-const STAGES: [&str; 2] = ["build", "preview"];
 
 enum Fail {
     Usage(String),
@@ -106,8 +104,11 @@ fn main() -> ExitCode {
     let result = match args.split_first() {
         Some((s, rest)) if s == "stages" && rest.is_empty() => {
             println!("{}", env!("CARGO_PKG_VERSION"));
-            for s in STAGES {
-                println!("{s}");
+            println!("build");
+            // `hyve preview` ends when any stage ends, so `preview` is
+            // offered only when there is an app to preview.
+            if workspace().is_ok_and(|ws| ws.packages.iter().any(|p| p.web)) {
+                println!("preview");
             }
             Ok(())
         }
