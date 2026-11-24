@@ -1,6 +1,6 @@
 # 01. DX 및 DSL 설계 (serge)
 
-> 상태: 뷰 마크업 `ui!` 5대 최소 문법 · 기능 조립 `feature()` 체이닝 · `#[server]` 인라인 서버 함수 호출 · CRA급 데브 서버 내장은 **확정**, 추가 세부 속성은 **제안** · 기준일: 2026-11-19
+> 상태: 뷰 마크업 `ui!` 5대 최소 문법 · 기능 조립 `feature()` 체이닝 · `#[server]` 인라인 서버 함수 호출 · CRA급 데브 서버 내장은 **확정**, 추가 세부 속성은 **제안** · 기준일: 2026-11-24
 
 `serge`의 DX 목표는 **웹(DOM)이든 네이티브(GPU/CPU, 데스크톱·iOS·Android)든 완전히 동일한 proc macro UI DSL(`ui!`)로 화면을 구축**하고, 기능·상태·라우트 조립은 `orbic::component()`와 대칭되는 `serge::feature()` Rust 체이닝으로 묶는 것입니다.
 
@@ -18,6 +18,38 @@
   - **Web 전용 확장**: DOM 시맨틱 속성(`web::class`, `web::aria_label`), History/Storage/DOM 이벤트, Ionic 웹 컴포넌트.
   - **Native 전용 확장 및 커스텀 드로잉**: OS 창/메뉴 제어, 시스템 단축키, 그리고 크리에이티브 툴(뷰포트·타임라인·노드 에디터·히스토그램)에서 직접 GPU/CPU 패스를 발행하는 `Canvas` / `paint(bounds, ctx) => { ... }` 탈출구.
 
+### 컴포넌트 인자 규칙 (확정, 2026-11-24)
+
+`#[component]` 함수의 인자는 다음 세 출처 중 하나에서만 옵니다.
+
+1. **주입**: `Ctx<T>`는 `feature().provide()`가 제공한 값입니다. 제공한 값은 그 기능과 하위 조립에서만 보이고, 조립 시점에 해석합니다.
+2. **라우트 파라미터**: 라우트로 진입하는 컴포넌트는 경로·쿼리를 `hyve` 모델로 파싱한 값을 `Path<T>`와 `Query<T>`로 받습니다. 경로 자리표시자는 `.route("/projects/{id}", ...)`처럼 `{이름}`으로 쓰고 모델의 같은 이름 필드에 채웁니다(`orbic` 핸들러와 같은 타입, `hyve/docs/02-architecture.md` §2.4).
+3. **프로퍼티**: 그 밖의 인자는 부모의 `ui!`가 넘깁니다.
+
+`.route()`로 진입하는 컴포넌트는 앞의 두 가지만 받을 수 있습니다. 타입이 같다는 이유로 인자를 암묵적으로 만들거나 공유하지 않습니다.
+
+### 문법 세부 규칙 (제안, 2026-11-24)
+
+- **위젯 이름**: 스코프의 Rust 항목으로 해석합니다. 내장 위젯과 사용자의 `#[component]` 함수가 같은 방식으로 태그가 되고, 알 수 없는 위젯·프로퍼티·`web::*`/`native::*` 속성은 컴파일 타임 진단이 됩니다.
+- **DSL이 해석하는 자리**: `"{expr}"` 보간과 `16px` 같은 단위 리터럴은 텍스트 리프와 프로퍼티 값 자리에서만 해석합니다. 이벤트 핸들러 본문과 제어문의 조건식은 수정 없이 그대로 Rust로 전달합니다.
+- **조건과 반복**: `if`와 `for`는 반응형 영역입니다. 조건이나 목록이 의존하는 시그널이 바뀌면 그 영역만 갱신합니다. `for`의 `key`는 필수이며 빠지면 컴파일 타임 진단이 됩니다.
+- **비동기 핸들러**: `=> async move { ... }`는 뷰 스코프에 묶인 작업으로 실행되어 UI 스레드를 막지 않고, 뷰가 언마운트되면 취소됩니다.
+- **문법 오류**: 어떤 입력에서도 유한한 시간 안에 스팬이 붙은 진단으로 끝납니다.
+- **프로퍼티가 아닌 인자**: 사용자 `#[component]`는 다음 규칙으로 호출부 문법을 받습니다.
+  - 자식 블록: 이름이 `children`이고 타입이 `Element`인 인자. 없는 컴포넌트에 자식을 쓰면 진단입니다.
+  - 이벤트: 타입이 `Callback<Args>`인 인자. 호출부에서는 `이름(args) => { ... }`로 넘깁니다.
+  - 생략: `Option<T>` 인자는 생략할 수 있고, 그 밖의 프로퍼티가 빠지면 진단입니다.
+  - 위치 텍스트 리프는 내장 텍스트 위젯(`Text` 등)에만 씁니다. 사용자 컴포넌트는 이름 있는 프로퍼티로 받습니다.
+- **타깃 구분**: Web DOM과 Native는 Cargo 피처가 아니라 컴파일 타깃으로 갈립니다. `wasm32` 타깃이면 Web DOM, 그 밖이면 Native입니다. `web::*`와 `native::*` 속성은 두 타깃 모두에서 이름과 타입을 검증하고, 해당하지 않는 타깃에서는 코드를 내지 않습니다. 그래서 같은 화면 코드에 두 네임스페이스를 함께 써도 됩니다.
+- **웹의 `Canvas`**: Phase 1의 Web DOM 타깃은 `paint(bounds, ctx)`의 `PaintCtx` 명령을 `<canvas>` 2D 컨텍스트에 그립니다. WebGPU 경로는 외부 GPU 텍스처 규격(`04-open-questions.md` #1)과 함께 정합니다.
+
+### 앱 루트 (제안, 2026-11-24)
+
+- `orbic`의 `OrbicApp`과 대칭으로, UI 앱의 루트는 `SergeApp`입니다. `SergeApp::new()`에 `.provide()`로 앱 스코프 값을, `.feature()`로 `UiFeature`를 등록하고 `.run()`으로 실행합니다. `UiFeature`도 `.feature()`로 하위 기능을 가질 수 있습니다.
+- `.run()`은 컴파일 타깃에 따라 Web DOM에서는 문서에 마운트하고, Native에서는 창을 엽니다. 라우트가 없는 앱은 `.root(Component)`로 첫 화면을 지정합니다.
+- 원격 호출에 쓸 전송은 앱 루트에서 `.provide()`로 제공합니다(`03-adapters-and-pipeline.md` §2, `hyve/docs/03-adapters-and-pipeline.md` §3.2).
+- `RequireAuth` 같은 화면 가드는 앱 스코프의 세션 상태를 읽어 진입을 막거나 이동시킬 뿐이며, 서버의 권한 검사를 대신하지 않습니다.
+
 ### 확정 문법 기준 예시 (컴포넌트 조립 · `ui!` · 인라인 서버 함수 · Shm Ring Buffer · Live Activity)
 
 ```rust
@@ -27,17 +59,16 @@ use serge::prelude::*;
 // 1) 도메인/기능 단위 조립: `serge::feature()` 순수 Rust 체이닝 고정 (`orbic::component()`와 충돌 0)
 pub fn project_feature() -> UiFeature {
     feature()
-        .provide(|| ProjectDraftStore { title: signal(String::new()) })
+        .provide(|| ProjectDraftStore { title: signal(String::new()), exposure: signal(0.0_f32) })
         .wrap(RequireAuth::redirect("/login"))
         .route("/projects", ProjectEditorCard)
 }
 
 // 2) 뷰(UI 트리) 마크업: `ui!` 5대 최소 문법 + 인라인 `#[server]` 호출 (Web DOM & Native GPU/CPU 공통)
 #[component]
-pub fn ProjectEditorCard(
-    store: Ctx<ProjectDraftStore>,
-    exposure: Signal<f32>,
-) -> Element {
+pub fn ProjectEditorCard(store: Ctx<ProjectDraftStore>) -> Element {
+    // 라우트 진입 컴포넌트는 주입(`Ctx<T>`)과 라우트 파라미터만 받는다. `Signal<T>`는 `Copy` 핸들이라 꺼내 써도 된다.
+    let exposure = store.exposure;
     let mut liked = signal(false);
 
     ui! {
@@ -59,7 +90,7 @@ pub fn ProjectEditorCard(
                 text: "저장",
                 clicked => async move {
                     // `#[server]` 함수 호출: 클라이언트 빌드에서는 서버 본문·DB 의존성이 완전히 제거된 RPC 스텁으로 치환됨
-                    let _ = create_project_rpc(CreateProject { title: store.title() }).await;
+                    let _ = create_project_rpc(CreateProject { title: store.title.get() }).await;
                 }
             }
             // 저수준 GPU/CPU 또는 Canvas/WebGPU 직접 드로잉이 필요할 때는 Canvas 위젯의 paint 이벤트로 탈출
