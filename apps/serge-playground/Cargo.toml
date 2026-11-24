@@ -36,5 +36,8 @@ tokio = { workspace = true, optional = true, features = ["macros", "net", "rt-mu
 [dev-dependencies]
 hyve = { workspace = true, features = ["test"] }
 
+[package.metadata.serge]
+web = true
+
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 # 02. 아키텍처와 크레이트 구조 (serge)
 
-> 상태: `apps/`·`crates/` 모노레포·`hyve` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-24
+> 상태: `apps/`·`crates/` 모노레포·`hyve` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-25
 
 `serge` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1). 하나의 공통 UI 코어 위에 **Web(DOM/SSR) 렌더 타깃**과 **Native(GPU/CPU) 렌더 타깃**이 대칭으로 올라갑니다.
 
@@ -25,6 +25,7 @@ serge/
     serge-web-dev/             # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyve preview` 연동)
 
     # --- Native (GPU + 필수 CPU 폴백) 타깃 크레이트 ---
+    serge-native/              # 네이티브 런타임: 유지 트리·시그널 동기화·장면 수집·히트 테스트·입력·UI 작업 실행기·헤드리스 하네스 (제안, 2026-11-25)
     serge-native-layout/       # 네이티브 전용 고속 Flexbox/Grid/절대배치 레이아웃 솔버 (`taffy` 포크 계열, Web WASM 번들과 완전 분리)
     serge-native-gpu/          # GPUI/Rune식 GPU 배칭 렌더 백엔드 (쿼드·경로·그림자·글리프·ExternalTexture 제로카피 합성)
     serge-native-cpu/          # 필수 CPU 소프트웨어 폴백 렌더 백엔드 (동일 ScenePrimitive 소비)
@@ -67,5 +68,18 @@ serge/
 | `serge-native-cpu` | `vello_cpu` (`0.4.0`, `Apache-2.0 OR MIT`) | `vello`와 동일 씬 모델을 공유하는 SIMD 소프트웨어 래스터라이저로 필수 CPU 폴백 대칭 구현 |
 | `serge-native-text` | `parley` (`0.13.0`, `Apache-2.0 OR MIT`) + `swash` (`0.2.10`, `Apache-2.0 OR MIT`) | Linebender 텍스트 셰이핑·글리프 래스터라이저를 `serge-native-gpu`/`cpu` 아틀라스에 직결 |
 | `serge-platform-*` · `serge-native-sys` | `winit` (`0.31.0-beta.4`, `Apache-2.0` — **포크 없는 외부 의존성 전용**), `accesskit` (`0.25.2`, `MIT OR Apache-2.0`) | `winit`은 외부 의존성으로만 사용해 순수 MIT 유지; 추후 OS 창 제어 최적화 필요 시 `raw-window-handle`(`0.6.2`, `MIT OR Apache-2.0 OR Zlib`) 기반 자체 MIT OS 어댑터로 대체 |
+
+### 3.1 Phase 1 착수 방식 (2026-11-25)
+
+포크 표의 베이스 크레이트 선택은 그대로이고, Phase 1 프로토타입은 포크를 만들지 않고 베이스 크레이트를 정확한 버전(`=`)으로 고정해 의존합니다. 포크본과 원본의 차이·측정 기록(`05-implementation-plan.md` §3 포크 검증)은 **미완**입니다.
+
+- `serge-native-layout`: `taffy` `=0.15.1` (확인 시점의 최신 `0.16.0`은 공개 하루째라 보류).
+- `serge-native-cpu`: `vello_cpu` `=0.4.0`. 글리프도 `vello_cpu`가 `parley`의 폰트 데이터로 그리므로 `swash`는 쓰지 않습니다(확정의 실행 방식을 바꿈).
+- `serge-native-text`: `parley` `=0.13.0`.
+- `serge-web-dom`: `tachys`는 레퍼런스로만 보고 직접 구현합니다. 포크 방향이 내부를 다시 쓰는 것이고 `tachys`는 `reactive_graph`에 묶여 있어 `hyve-state`와 맞지 않습니다(확정의 실행 방식을 바꿈).
+- `serge-platform-desktop`: `winit` `=0.30.13`(표의 `0.31.0-beta.4` 대신 안정판), CPU 프레임 표시에 `softbuffer` `=0.4.8`(새 외부 의존성, `MIT OR Apache-2.0`). GPU 경로(`wgpu` `30.0.2`)는 **미완**이라 자동 선택은 CPU이고, `HYPERISH_RENDER_BACKEND=gpu`는 오류입니다.
+- 매크로: `syn` `2.0.119`(표의 `3.0.10` 대신. 생태계의 `quote`·`proc-macro2`와 맞춤).
+- 원격 전송(네이티브): `hyper` `=1.12.0`, `hyper-util` `=0.1.21`, `http-body-util` `=0.1.5`, `http` `=1.5.0`, `bytes` `=1.12.2`. 개발 도구: `serde_json` `=1.0.154`. 모두 `MIT` 또는 `MIT OR Apache-2.0`.
+- 최소 Rust 버전은 워크스페이스 전체 `1.94`입니다(쇼케이스가 링크하는 `orbic`의 요구).
 
 외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): 웹 바인딩 `wasm-bindgen` (`0.2.130`), `wasm-bindgen-futures` (`0.4.80`), `web-sys` (`0.3.107`), `js-sys` (`0.3.107`), 매크로용 `syn` (`3.0.10`), `quote` (`1.0.47`), `proc-macro2` (`1.0.107`) — 모두 `MIT OR Apache-2.0`. 네이티브의 비동기 I/O는 패밀리 공통 런타임 `tokio` (`1.54.1`, `MIT`)를 쓰고, 웹은 브라우저 이벤트 루프를 씁니다(`hyve/docs/02-architecture.md` §2.5). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.

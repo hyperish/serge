@@ -282,6 +282,9 @@ impl RemoteTransport {
             init.set_body(&js_sys::Uint8Array::from(&req.body[..]).into());
         }
         init.set_signal(Some(&guard.0.signal()));
+        // The session cookie goes along (also to an API on another origin
+        // that allows credentials).
+        init.set_credentials(web_sys::RequestCredentials::Include);
         let url = format!("{}{}", self.origin, req.path);
         let request = web_sys::Request::new_with_str_and_init(&url, &init).map_err(fail)?;
         let window = web_sys::window().ok_or_else(|| errors::transport_unavailable("no window"))?;

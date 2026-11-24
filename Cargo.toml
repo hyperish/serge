@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground"]
+members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground", "crates/serge-web-dev", "apps/serge-cli"]
 resolver = "3"
 
 [workspace.package]
@@ -55,6 +55,7 @@ hyper-util = { version = "=0.1.21", default-features = false }
 http-body-util = "=0.1.5"
 http = "=1.5.0"
 bytes = "=1.12.2"
+serde_json = "=1.0.154"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

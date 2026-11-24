@@ -1,6 +1,6 @@
 # 03. 파이프라인과 호환 어댑터 (serge)
 
-> 상태: Web(Leptos형 DOM + Ionic형 UI + CRA급 데브 서버) 및 Native(GPUI/Rune형 GPU + 필수 CPU 폴백 · 데스크톱/iOS/Android · 자체 WebView 금지) 파이프라인 통합은 **확정**, 세부 동작은 **제안** · 기준일: 2026-11-24
+> 상태: Web(Leptos형 DOM + Ionic형 UI + CRA급 데브 서버) 및 Native(GPUI/Rune형 GPU + 필수 CPU 폴백 · 데스크톱/iOS/Android · 자체 WebView 금지) 파이프라인 통합은 **확정**, 세부 동작은 **제안** · 기준일: 2026-11-25
 
 `serge`는 하나의 공통 반응형 뷰 트리(`serge-core` + `hyve-state`)로부터 **Web(DOM) 렌더링 파이프라인**과 **Native(GPU/CPU) 렌더링 파이프라인** 두 갈래의 실행 경로를 제공합니다.
 
@@ -9,6 +9,7 @@
 ### 1.1 Web 타깃 파이프라인 (Leptos 레퍼런스)
 1. **컴파일 타임 정적 분리 (`serge-macros`)**: 정적 HTML 골격 문자열과 동적 바인딩 지점(시그널, 이벤트, 슬롯)을 분리합니다.
 2. **클라이언트 DOM 마운트 및 수술적 패칭 (`serge-web-dom`)**: 최초 마운트 시 `<template>` 노드를 `cloneNode(true)`로 복제하고, 시그널 변경 시 가상 DOM 전체 비교 없이 해당 DOM 텍스트·속성만 즉시 갱신합니다.
+   - **Phase 1 프로토타입 (2026-11-25)**: 동적 프로퍼티마다 효과 하나로 그 텍스트·속성만 갱신하고, `if` 영역과 키 있는 `for` 목록은 주석 마커 사이에서 갱신합니다(값이 같은 항목은 DOM 노드를 옮김). 노드는 DOM 호출로 만들며 `<template>` 복제는 **미완**입니다. 스타일은 `serge-style`이 낸 인라인 선언과 테마 CSS 변수입니다.
 3. **스트리밍 SSR & Hydration (`serge-web-ssr`)**: `orbic` 백엔드와 결합 시 비동기 리소스가 준비되는 대로 HTML 청크와 직렬화된 상태(`hyve-serde`)를 스트리밍하고 클라이언트에서 이벤트·시그널만 복원합니다.
 
 ### 1.2 Native 타깃 파이프라인 (GPUI & `anomalyco/rune` 레퍼런스)
@@ -18,6 +19,7 @@
 4. **GPU 실행 또는 CPU 폴백 (`serge-native-gpu` / `serge-native-cpu`)**:
    - **기본 경로 (`serge-native-gpu`)**: 인스턴스 버퍼와 아틀라스를 통해 최소 드로우콜로 GPU에서 120fps 합성.
    - **필수 폴백 경로 (`serge-native-cpu`)**: GPU 초기화 실패, 가상 디스플레이, 헤드리스 CI 테스트 환경에서 SIMD 최적화된 CPU 래스터라이저가 동일한 `ScenePrimitive`를 픽셀 버퍼에 렌더링.
+   - **Phase 1 프로토타입 (2026-11-25)**: 유지 트리와 입력은 `serge-native`, 창은 `winit`, CPU 프레임 표시는 `softbuffer`입니다. GPU 경로는 **미완**이라 이 빌드의 자동 선택은 CPU이고, 정책 함수(`choose_backend`)는 환경 변수 값·헤드리스 여부·디바이스 생성 결과만으로 정해지는 순수 함수로 테스트합니다.
    - **전환 정책 (확정, 2026-11-24)**: GPU 디바이스를 만들지 못하면 자동으로 CPU 경로로 전환합니다. 환경 변수 `HYPERISH_RENDER_BACKEND`에 `cpu` 또는 `gpu`를 명시할 수 있고, `gpu`를 명시했는데 실패하면 폴백하지 않고 오류를 냅니다. 헤드리스 테스트는 CPU 경로를 씁니다. 명시한 환경 변수가 항상 우선하고, 변수가 없을 때만 헤드리스 테스트의 CPU 기본값과 자동 전환이 적용됩니다. 가상 디스플레이는 따로 감지하지 않고 디바이스 생성 실패로 다룹니다. 실행 중 디바이스를 잃었을 때의 전환은 제안입니다.
 
 ## 2. 호환 어댑터 및 플랫폼 바인딩
@@ -39,6 +41,8 @@
 - **Tier 3 원격 요청-응답**: `hyve/docs/03-adapters-and-pipeline.md` §3의 전송 계약을 구현한 원격 전송입니다. 기준 URL(출처와 경로 접두어)과 레일 고정 여부를 설정으로 받습니다.
 - **자격 증명**: 웹에서는 브라우저가 세션 쿠키를 보내도록 요청하고, 앱이 세션 응답에서 받은 CSRF 토큰을 전송에 설정하면 상태를 바꾸는 호출에 `X-CSRF-Token`으로 붙입니다. 네이티브에서는 앱이 설정한 `Bearer` 토큰을 붙입니다. Phase 1의 전송은 받은 토큰을 메모리에만 두고, 토큰을 어디에 보관할지는 앱이 정합니다. OS 보안 저장소 연동은 `serge-native-sys`와 함께 Phase 2에 옵니다. 로그인 화면과 세션을 얻는 호출은 앱이 만듭니다.
 - **개발 서버**: 웹 번들은 `serge-web-dev`가, API는 `orbic` 개발 서버가 서빙하므로 출처가 다릅니다. `serge-web-dev`는 `hyve.toml`의 `[serge] api_proxy`에 적은 경로 접두어를 백엔드로 프록시해 브라우저에서는 같은 출처로 보이게 합니다.
+  - **형식 (제안, 2026-11-25)**: `api_proxy = "http://127.0.0.1:3000/v1"`처럼 URL 하나이고, 그 경로(`/v1`)가 프록시할 접두어입니다(경로가 없으면 `/v1`). `hyve-serge preview --api-proxy <URL>`이 설정보다 우선합니다. 백엔드에 닿지 못하면 `502`와 이유를 돌려줍니다.
+- **구현 세부 (제안, 2026-11-25)**: 원격 전송은 `RemoteTransport::new(기준 URL)`이고 `.rail(..)`, `.bearer(..)`, `.csrf_token(..)`, `.header(..)`로 설정합니다. 고속 레일이 `415`를 받으면 그 호출을 표준 레일로 한 번 다시 보냅니다. 네이티브는 `serge`의 `tokio` 런타임에서 `hyper`로 보내고(Phase 1은 평문 `http://`만, TLS는 **미완**), 웹은 `fetch`와 `AbortController`로 보내며 `credentials: include`로 세션 쿠키를 함께 보냅니다. 뷰가 언마운트되거나 호출의 토큰이 취소되면 요청을 끊고 `cancelled` 오류를 돌려줍니다. `SharedRingBuf`는 Phase 1에서 뮤텍스로 보호하는 고정 크기 버퍼이고(락 없는 구현은 **미완**), `read_latest_snapshot`이 찢어지지 않은 최신 샘플을 복사합니다.
 - **도구 단계**: `hyve preview`와 `hyve build`가 호출하는 웹 번들링·개발 서버·네이티브 실행은 `serge`가 제공하는 `hyve-serge` 실행 파일의 단계입니다(`hyve/docs/01-dx-and-dsl.md` §2).
 
 ## 3. `serge` → `orbic` 프로덕션 서빙 핸드오프 계약 (제안)

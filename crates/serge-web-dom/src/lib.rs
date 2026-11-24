@@ -37,6 +37,7 @@ body {
   font-size: 16px; line-height: 1.25; -webkit-font-smoothing: antialiased;
 }
 #serge-root { display: flex; flex-direction: column; min-height: 100vh; box-sizing: border-box; }
+.serge-text, .serge-button, .serge-link, .serge-checkbox span { white-space: pre-wrap; }
 .serge-button { cursor: pointer; font: inherit; line-height: 1.25; }
 .serge-button:hover { filter: brightness(1.08); }
 .serge-button:active { filter: brightness(0.92); }

@@ -84,6 +84,8 @@ struct App<F> {
     pointer: (f32, f32),
     buffer: Vec<u32>,
     error: Option<DesktopError>,
+    reported: bool,
+    debug_frame: Option<std::path::PathBuf>,
 }
 
 fn named(key: &WKey) -> Option<Key> {
@@ -126,10 +128,31 @@ impl<F: FnOnce() -> Element> App<F> {
         if w.surface.resize(nw, nh).is_err() {
             return;
         }
-        if let Ok(mut buf) = w.surface.buffer_mut() {
-            let n = buf.len().min(self.buffer.len());
-            buf[..n].copy_from_slice(&self.buffer[..n]);
-            let _ = buf.present();
+        match w.surface.buffer_mut() {
+            Ok(mut buf) => {
+                let n = buf.len().min(self.buffer.len());
+                buf[..n].copy_from_slice(&self.buffer[..n]);
+                if let Err(e) = buf.present()
+                    && !self.reported
+                {
+                    eprintln!("serge: presenting the frame failed: {e}");
+                    self.reported = true;
+                }
+            }
+            Err(e) if !self.reported => {
+                eprintln!("serge: no frame buffer for the window: {e}");
+                self.reported = true;
+            }
+            Err(_) => {}
+        }
+        // `SERGE_DEBUG_FRAME=<file.ppm>`: the frame just presented, as
+        // pixels (to inspect a window where screenshots are not allowed).
+        if let Some(path) = &self.debug_frame {
+            let mut out = format!("P6\n{} {}\n255\n", frame.width, frame.height).into_bytes();
+            for p in frame.rgba.as_chunks::<4>().0 {
+                out.extend_from_slice(&p[..3]);
+            }
+            let _ = std::fs::write(path, out);
         }
     }
 
@@ -316,6 +339,8 @@ pub fn run(
         pointer: (0.0, 0.0),
         buffer: Vec::new(),
         error: None,
+        reported: false,
+        debug_frame: std::env::var_os("SERGE_DEBUG_FRAME").map(Into::into),
     };
     el.run_app(&mut app)
         .map_err(|e| DesktopError::Platform(e.to_string()))?;

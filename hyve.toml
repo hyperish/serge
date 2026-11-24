@@ -1,0 +1,4 @@
+# `hyve-serge preview --web` proxies this prefix to the playground backend
+# (`cargo run -p serge-playground --features server --bin playground-server`).
+[serge]
+api_proxy = "http://127.0.0.1:3000/v1"

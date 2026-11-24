@@ -33,6 +33,40 @@ pub fn CounterCard() -> Element {
 | **Flutter**: 웹에서도 DOM 대신 캔버스 통째로 그려 웹 표준·SEO·번들 크기에서 불리함 | **웹에서는 진짜 DOM, 네이티브에서는 진짜 GPU**: 하나의 UI 문법을 쓰되 웹 타깃은 Leptos식 세밀한 실제 DOM/SSR로, 네이티브 타깃은 GPU/CPU 프리미티브로 출력 |
 | **구조를 강제하는 프레임워크**: UI 조각 외에 상태·라우팅·권한 가드가 흩어지거나 아키텍처 확장이 막힘 | **조립은 체이닝(`feature()`), 뷰는 proc macro DSL(`ui!`)**: 기능·라우트·가드 조립은 `orbic::component()`와 대칭되는 Rust 체이닝(`serge::feature().provide().wrap().route()`)으로, 화면 마크업은 proc macro DSL(`ui!`)로 역할을 명확히 분리하고 저수준 `PaintCtx` 탈출구를 개방 |
 
+## 써 보기 (1차 프로토타입, 2026-11-25)
+
+`apps/serge-playground`는 위 `CounterCard`와 [`01-dx-and-dsl.md`](docs/01-dx-and-dsl.md)의 예시(`project_feature`·`ProjectEditorCard`·`RealtimeTelemetry`)를 한 앱으로 묶은 쇼케이스입니다. `hyve`·`orbic`은 아직 배포 전이라 이 레포 옆에 `../hyve`, `../orbic`이 있어야 합니다. Rust `1.94` 이상이 필요합니다.
+
+**데스크톱 창** (백엔드를 같은 프로세스에서 실행, 포트 없음):
+
+```sh
+cargo run -p serge-playground --features server
+```
+
+**웹 브라우저** (터미널 두 개):
+
+```sh
+# 1) orbic 백엔드: http://127.0.0.1:3000/v1
+cargo run -p serge-playground --features server --bin playground-server
+
+# 2) 웹 번들 + 데브 서버: http://127.0.0.1:8080/ (`/v1`은 백엔드로 프록시, 소스를 저장하면 다시 빌드하고 새로 고침)
+cargo run -p serge-cli -- preview --web
+```
+
+웹 빌드에는 `rustup target add wasm32-unknown-unknown`과 `Cargo.lock`의 버전과 같은 `wasm-bindgen` CLI(`cargo install wasm-bindgen-cli --version =0.2.130`)가 필요합니다. 프록시 대상은 [`hyve.toml`](hyve.toml)의 `[serge] api_proxy`이고 `--api-proxy <URL>`로 바꿀 수 있습니다. 데스크톱 앱을 따로 띄운 백엔드에 붙이려면 `SERGE_API_URL=http://127.0.0.1:3000/v1 cargo run -p serge-playground`입니다. `cargo run -p serge-cli -- preview`(옵션 없음)는 웹과 데스크톱을 함께 띄웁니다.
+
+화면: 카운터, 할 일 목록(입력·체크박스·키 있는 목록), 프로젝트 편집기(로그인 가드 → 데모 로그인), 저장된 프로젝트(`#[server]` 호출·서버 검증 오류·느린 호출 취소), 실시간 텔레메트리(`SharedRingBuf` → `Canvas`).
+
+**프로토타입의 한계**: 네이티브는 CPU 렌더러만 있고 GPU 경로는 아직 없습니다. 웹은 템플릿 복제 없이 DOM을 만들고, 소스 변경 시 상태를 보존하지 않고 새로 고칩니다. 원격 전송은 평문 `http://`만 지원합니다. 진행 상황은 [`05-implementation-plan.md`](docs/05-implementation-plan.md) §4에 있습니다.
+
+**테스트**:
+
+```sh
+cargo test --workspace                                   # 네이티브 헤드리스·CPU 스냅샷·CLI·데브 서버
+cargo test -p serge-playground --features server         # 실제 orbic 서버와 원격·인프로세스 호출
+CHROMEDRIVER=<chromedriver 경로> cargo test --target wasm32-unknown-unknown -p serge --test web   # 헤드리스 Chrome의 DOM
+```
+
 수직 통합을 위해 [`hyve`](https://github.com/hyperish/hyve)의 코어(`ref`)를 기준으로 구현합니다. 상위 범용 명세와 문서 상태 규칙(`확정` / `제안` / `미정`)은 [`hyperish/docs`](https://github.com/hyperish/docs)를 따릅니다.
 
 ## 문서 목록

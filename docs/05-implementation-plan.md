@@ -1,6 +1,6 @@
 # 05. 구현 계획 (serge)
 
-> 상태: **제안** · 기준일: 2026-11-24
+> 상태: **제안** · 기준일: 2026-11-25
 
 Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어가는 크레이트는 [`04-open-questions.md`](04-open-questions.md)의 Phase 컷이, 크레이트 구조와 책임은 [`02-architecture.md`](02-architecture.md)가 정합니다. 패밀리 차원의 완료 기준은 `hyperish/docs`의 `00-vision.md`에 있습니다.
 
@@ -8,7 +8,7 @@ Phase 1(`v0.1.0`)의 작업 순서와 완료 기준입니다. Phase 1에 들어�
 
 ## 1. 출발점
 
-- 현재 코드는 서드파티 의존성이 없는 자리표시자입니다. 크레이트는 `serge`, `serge-macros`와 `apps/serge-playground`뿐이고, 웹 출력은 HTML 문자열, GPU 렌더러는 프리미티브 집계입니다. 고쳐 쓰지 않고 교체합니다.
+- (2026-11-24 기준) 코드는 서드파티 의존성이 없는 자리표시자였고, 2026-11-25에 아래 §4의 1차 프로토타입으로 교체했습니다.
 - 공개 API의 기준은 문서입니다. `crates/serge/tests/mvp.rs`는 문서 예시를 옮긴 테스트로 다시 씁니다.
 - 구현에 앞서 할 일:
   1. 포크 대상의 기준 리비전을 다시 확인해 고정하고 기록합니다(`hyperish/docs` `05-development-rules.md` §7).
@@ -41,3 +41,20 @@ SSR/SSG, 적응형 웹 UI, 영속 시그널, 데스크톱 시스템 API, 공유 
 - **의존 경계**: 네이티브 크레이트의 의존 그래프에 WebView가 없고, 웹 번들에 네이티브 레이아웃 솔버가 들어가지 않습니다.
 - **포크 검증**: 포크본이 원본과 달라진 점과 측정 결과를 남깁니다.
 - **CI**: 포맷, 린트, 테스트, 최소 Rust 버전 빌드가 통과하고, 공개 크레이트 전부가 패키징됩니다. 충족하면 `0.1.0-alpha.N` 프리릴리스를 배포합니다.
+
+## 4. 진행 상황 — 1차 사용성 프로토타입 (2026-11-25)
+
+목표는 Phase 1 완료가 아니라 "손으로 써 보고 사용성을 판단할 수 있는" 프로토타입입니다. 웹(실제 DOM)과 데스크톱(창, CPU 렌더러)에서 같은 앱이 돌고, `#[server]` 호출이 `orbic` 백엔드로 갑니다. 써 보는 방법은 `README.md`에 있습니다.
+
+| 단계 | 상태 | 확인 |
+|---|---|---|
+| 1 `serge-core` | 구현 | 뷰 트리, 위젯, 뷰 스코프·작업·취소, `PaintCtx`·`ScenePrimitive`, `FromView`(`Ctx`·`Path`·`Query`) |
+| 2 `serge-macros` | 구현, 컴파일 실패 테스트 **미완** | 문서 예시가 그대로 컴파일(`crates/serge/tests/macros.rs`). 알 수 없는 위젯·빠진 `key`·깨진 문법의 진단 테스트는 아직 없음 |
+| 3 `serge-style` | 구현 | 토큰(밝은·어두운 테마), 스타일 IR, CSS 출력 |
+| 4 `serge-router` | 구현 | 가드 이동, 화면 전환 시 진행 중 호출 취소, 기능 스코프 유지, 조립 오류(`crates/serge/tests/app.rs`) |
+| 5 `serge-web-dom`, `serge-web-dev` | 구현, 템플릿 복제·HMR **미완** | 헤드리스 Chrome에서 DOM 테스트(`crates/serge/tests/web.rs`), 데브 서버 테스트, 실제 브라우저로 쇼케이스 전체 흐름(링크·뒤로 가기·입력·`#[server]`·캔버스·라이브 리로드) 확인 |
+| 6 네이티브 | CPU 경로 구현, GPU 경로 **미완** | 헤드리스 런타임 테스트, 1×·2× CPU 스냅샷, 쇼케이스 전 화면 렌더. 실제 창을 열어 표시한 프레임을 확인했으나 화면 캡처·실제 입력은 **미검증**(실행 환경에 화면 기록·손쉬운 사용 권한 없음) |
+| 7 `serge-adapter-client` | 구현, 락 없는 링·TLS **미완** | 루프백 `orbic::serve`에 원격 호출: 두 레일과 스키마 불일치 폴백에서 인프로세스와 같은 결과·같은 오류, 스코프 해제 시 취소(`apps/serge-playground/tests/backend.rs`) |
+| 8 `serge`, 쇼케이스, `hyve-serge` | 구현 | `hyve-serge stages`·`build`·`preview`, `hyve build --debug`가 실제 `hyve-serge`를 거쳐 웹 번들을 만듦. 의존 경계 테스트(`crates/serge/tests/deps.rs`) |
+
+§3 완료 기준 중 남은 것: 컴파일 실패 진단 테스트, GPU 경로와 렌더러 대칭(GPU·CPU 결과 비교), 포크 검증 기록, CI 실행과 패키징(`hyve`·`orbic` 프리릴리스 뒤), 상태 보존 HMR(Phase 2).

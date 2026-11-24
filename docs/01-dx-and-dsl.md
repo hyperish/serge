@@ -1,6 +1,6 @@
 # 01. DX 및 DSL 설계 (serge)
 
-> 상태: 뷰 마크업 `ui!` 5대 최소 문법 · 기능 조립 `feature()` 체이닝 · `#[server]` 인라인 서버 함수 호출 · CRA급 데브 서버 내장은 **확정**, 추가 세부 속성은 **제안** · 기준일: 2026-11-24
+> 상태: 뷰 마크업 `ui!` 5대 최소 문법 · 기능 조립 `feature()` 체이닝 · `#[server]` 인라인 서버 함수 호출 · CRA급 데브 서버 내장은 **확정**, 추가 세부 속성은 **제안** · 기준일: 2026-11-25
 
 `serge`의 DX 목표는 **웹(DOM)이든 네이티브(GPU/CPU, 데스크톱·iOS·Android)든 완전히 동일한 proc macro UI DSL(`ui!`)로 화면을 구축**하고, 기능·상태·라우트 조립은 `orbic::component()`와 대칭되는 `serge::feature()` Rust 체이닝으로 묶는 것입니다.
 
@@ -49,6 +49,22 @@
 - `.run()`은 컴파일 타깃에 따라 Web DOM에서는 문서에 마운트하고, Native에서는 창을 엽니다. 라우트가 없는 앱은 `.root(Component)`로 첫 화면을 지정합니다.
 - 원격 호출에 쓸 전송은 앱 루트에서 `.provide()`로 제공합니다(`03-adapters-and-pipeline.md` §2, `hyve/docs/03-adapters-and-pipeline.md` §3.2).
 - `RequireAuth`가 읽는 것은 `serge-router`가 정의하는 `AuthState`(인증 여부를 담은 시그널)입니다. 앱이 루트에서 `.provide()`로 제공하고 로그인·로그아웃 때 갱신합니다. 제공하지 않고 `RequireAuth`를 쓰면 조립 시점 오류입니다. 화면 가드는 진입을 막거나 이동시킬 뿐이며, 서버의 권한 검사를 대신하지 않습니다.
+- **구현 세부 (제안, 2026-11-25)**: 전송은 타입으로 찾는 `.provide()` 대신 `.transport(Arc<dyn Transport>)`로 제공합니다(`hyve_api::provide_transport`와 같음). `.layout(|screen| ui! { .. })`는 모든 화면을 감싸는 틀(내비게이션 바 등)을 마운트 때 한 번 만들고, `location()`은 현재 주소를 추적되는 값으로 돌려줍니다. 조립 오류(라우트 중복, 잘못된 자리표시자, `AuthState` 없는 `RequireAuth`, 라우트도 `.root()`도 없음)는 `.assemble()`이 모아서 돌려주고 `.run()`은 그 목록으로 멈춥니다. 시작 경로·`.provide()`·기능 스코프 수명은 `04-open-questions.md` 결정 #3을 따릅니다.
+
+### 구현 규칙 (제안, 2026-11-25)
+
+1차 프로토타입을 구현하며 정한 규칙입니다.
+
+- **클로저 규칙**: `ui!`가 만드는 클로저(프로퍼티 식, 영역, 핸들러, `paint`)는 모두 `FnOnce + Clone`이고 실행할 때마다 새 복제본을 부릅니다. 캡처하는 값은 `Clone`이어야 하고(`Signal<T>`·`Ctx<T>`는 싼 핸들), 실행 사이에 남는 상태는 시그널에 둡니다. 두 자식 클로저가 같은 비`Copy` 값을 쓰면 Rust의 이동 규칙대로 먼저 복제합니다.
+- **프로퍼티 값**: 리터럴, 단위 리터럴(`16px`, `1.5rem`, `50%`), 경로, 필드 접근, 부호 반전, 범위, 튜플·배열은 한 번 평가하는 고정 값이고, 그 밖의 식은 읽은 시그널이 바뀌면 다시 평가합니다. `{expr[:spec]}`가 든 문자열 리터럴은 다시 평가하는 `format!`입니다. 접미사 없는 숫자 리터럴은 프로퍼티의 타입을 따릅니다(`font_weight: 700`은 `u16`, `grow: 1.0`은 `f32`). `em` 단위는 없습니다.
+- **정렬 값**: `align`·`justify`는 `Align::Center`처럼 씁니다. prelude는 문서 예시의 `v_stack`·`h_stack`만 소문자 상수로 내보냅니다(`start`·`end` 같은 소문자 상수는 그 prelude를 쓰는 파일의 `let start = ..`를 상수 패턴으로 바꿔 버림).
+- **사용자 컴포넌트**: `#[component]`는 함수를 그대로 두고 같은 이름의 타입 상태(typestate) 빌더를 만듭니다. 필수 프로퍼티·이벤트가 빠지면 그 이름을 적은 컴파일 오류입니다. 컴포넌트 호출은 영역이라 프로퍼티 식이 읽은 시그널이 바뀌면 다시 만들어지고(지역 상태는 사라짐), 본문은 추적하지 않습니다.
+- **키 있는 목록**: 같은 키의 항목은 값이 같으면 뷰를 유지한 채 옮기고, 값이 바뀌면 그 항목만 다시 만듭니다(항목 타입은 `Clone + PartialEq`). 같은 키가 두 번 나오면 서로 다른 항목으로 다룹니다.
+- **뷰 스코프**: 뷰는 `hyve` `Scope`와 반응형 `Owner`의 짝입니다. 효과·핸들러·작업은 뷰의 스코프 안에서 실행되고, 뷰가 언마운트되면 그 아래의 작업과 `#[server]` 호출이 취소됩니다. `#[server]` 호출은 만들어질 때 스코프에서 전송을 찾습니다.
+- **UI 작업**: `spawn(future)`는 현재 뷰에 묶인 작업, `sleep(duration)`은 두 타깃 공용 타이머입니다. 네이티브는 UI 스레드에서 작업을 폴링하되 `serge`의 `tokio` 런타임 문맥 안에서 폴링하므로 인프로세스 `#[server]` 핸들러가 I/O와 타이머를 쓸 수 있습니다.
+- **`FrameSource`**: `paint` 안에서 읽은 프레임 소스(`SharedRingBuf` 등)가 바뀌면 다음 프레임에 그 캔버스만 다시 그립니다. 시그널을 샘플마다 바꾸지 않습니다.
+- **`PaintCtx`**: 두 타깃 공용의 구체 타입 하나입니다. 예시의 `draw_histogram`·`draw_sparkline`은 앱이 정의하는 확장 트레이트입니다.
+- **헤드리스 테스트**: `serge::testing::Headless`가 네이티브 런타임을 창 없이 돌리고(클릭·입력·키·슬라이더 시뮬레이션, 작업 실행), `CpuRenderer`가 그 장면을 픽셀로 그립니다. 웹은 `serge::testing::mount`로 실제 DOM에 마운트해 `wasm-bindgen-test`로 확인합니다.
 
 ### 확정 문법 기준 예시 (컴포넌트 조립 · `ui!` · 인라인 서버 함수 · Shm Ring Buffer · Live Activity)
 
@@ -142,6 +158,7 @@ pub fn ExportIsland(state: ExportStatus) -> LiveActivity {
 ## 2. `hyve` CLI와 통합된 멀티타깃 개발 흐름
 
 - **내장 웹 데브 서버 (`serge-web-dev` / `hyve preview --web`)**: CRA(Create React App)나 Vite처럼 `orbic` 백엔드 없이도 즉시 로컬 개발 서버를 띄워 WASM/JS 번들링, 정적 에셋 서빙, SPA 라우팅 폴백, 상태 보존 HMR을 수행합니다.
+  - **Phase 1 프로토타입 (2026-11-25)**: 소스가 바뀌면 다시 빌드하고 페이지를 새로 고칩니다(상태 보존 HMR은 **미완**). 웹 앱은 매니페스트의 `[package.metadata.serge] web = true`로 표시하고, 번들은 `target/serge/<패키지>/`에 생깁니다. 앱의 `web/` 폴더(있으면 `index.html` 포함)를 번들에 복사합니다.
 - **네이티브 실시간 프리뷰 (`hyve preview --native` / `--ios` / `--android`)**: 데스크톱 창 또는 모바일 시뮬레이터/실기기에서 `hyve-state`를 유지한 채 GPU/CPU 네이티브 UI를 즉시 핫리로드합니다.
 - **통합 정적 검증 (`hyve lint`)**: 웹 접근성(a11y)·Hydration 불일치 검사와 네이티브 UI 스레드 블로킹·WebView 무단 유입·레이아웃 순환 참조 검사를 함께 수행합니다.
 - **헤드리스 통합 테스트 (`hyve test`)**: 웹 타깃은 헤드리스 DOM/SSR 스냅샷으로, 네이티브 타깃은 **CPU 폴백 렌더러(`serge-native-cpu`)**를 이용한 프레임 버퍼 스냅샷 및 입력 시뮬레이션으로 GPU 없는 CI에서도 고속 검증합니다.

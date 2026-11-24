@@ -1,0 +1,15 @@
+[package]
+name = "serge-web-dev"
+description = "Web bundling and the local dev server of serge (SPA fallback, API proxy, live reload)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
