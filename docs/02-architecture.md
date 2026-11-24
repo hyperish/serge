@@ -1,6 +1,6 @@
 # 02. 아키텍처와 크레이트 구조 (serge)
 
-> 상태: `apps/`·`crates/` 모노레포·`hyve` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-19
+> 상태: `apps/`·`crates/` 모노레포·`hyve` 코어 `ref`·웹(DOM)+네이티브(GPU/CPU) 통합 구조는 **확정**, 세부 크레이트 분할은 **제안** · 기준일: 2026-11-24
 
 `serge` 레포는 Cargo 워크스페이스 기반의 모노레포(`apps/`, `crates/`)로 구성합니다(`hyperish/docs`의 `05-development-rules.md` §1). 하나의 공통 UI 코어 위에 **Web(DOM/SSR) 렌더 타깃**과 **Native(GPU/CPU) 렌더 타깃**이 대칭으로 올라갑니다.
 
@@ -56,11 +56,13 @@ serge/
 
 ## 3. 확정 MIT 포크 스택 및 내부 코어 `unit optimization` 타깃 (2026-11-19 확정)
 
+표의 버전·라이선스는 crates.io 레지스트리(`cargo info <크레이트>@<버전>`)에서 2026-11-24에 확인한 스냅샷입니다. 확정된 것은 베이스 크레이트의 선택이며, 포크 기준 리비전은 착수 시점에 다시 확인해 고정합니다(`hyperish/docs` `05-development-rules.md` §7).
+
 | 모듈 | 베이스 크레이트 (확인 버전 · 라이선스) | 포크 후 내부 코어 개조(1·2단계 `unit optimization`) 방향 |
 |---|---|---|
 | `serge-web-dom` | `tachys` (`0.3.0-rc1`, `MIT`) | 극단적 제네릭 튜플 중첩(컴파일 시간·WASM 팽창)을 걷어내고 `serge-macros`(`ui!`)가 정적 `<template>` + 고정 슬롯 오프셋 패칭 코드만 직접 방출하도록 경량화 |
 | `serge-native-layout` | `taffy` (`0.15.1`, `MIT`) | Web WASM 번들과 완전 분리; `serge-style`의 **컴팩트 SoA 스타일 테이블 + 더티 서브트리 증분 계산**으로 내부 메모리 레이아웃 개조 |
 | `serge-native-gpu` | `wgpu` (`30.0.2`, `MIT OR Apache-2.0`) + `vello` (`0.12.0`, `Apache-2.0 OR MIT`) *(GPUI는 아키텍처 레퍼런스 전용, 포크 금지)* | Phase 1은 단일 거대 인스턴스 버퍼 배칭(프레임당 1~3 드로우콜)으로 `wgpu` 제출 오버헤드 극소화 → Phase 2~3은 `ScenePrimitive` 아래를 **`wgpu-hal` 직결 또는 네이티브 Metal/Vulkan 직접 백엔드**로 교체 |
 | `serge-native-cpu` | `vello_cpu` (`0.4.0`, `Apache-2.0 OR MIT`) | `vello`와 동일 씬 모델을 공유하는 SIMD 소프트웨어 래스터라이저로 필수 CPU 폴백 대칭 구현 |
-| `serge-native-text` | `parley` (`0.13.0`) + `swash` (`0.2.10`, `Apache-2.0 OR MIT`) | Linebender 텍스트 셰이핑·글리프 래스터라이저를 `serge-native-gpu`/`cpu` 아틀라스에 직결 |
-| `serge-platform-*` · `serge-native-sys` | `winit` (`0.31.0-beta.4`, `Apache-2.0` — **포크 없는 외부 의존성 전용**), `accesskit` (`0.25.2`, `MIT OR Apache-2.0`) | `winit`은 외부 의존성으로만 사용해 순수 MIT 유지; 추후 OS 창 제어 최적화 필요 시 `raw-window-handle`(`0.6.2`, `MIT`) 기반 자체 MIT OS 어댑터로 대체 |
+| `serge-native-text` | `parley` (`0.13.0`, `Apache-2.0 OR MIT`) + `swash` (`0.2.10`, `Apache-2.0 OR MIT`) | Linebender 텍스트 셰이핑·글리프 래스터라이저를 `serge-native-gpu`/`cpu` 아틀라스에 직결 |
+| `serge-platform-*` · `serge-native-sys` | `winit` (`0.31.0-beta.4`, `Apache-2.0` — **포크 없는 외부 의존성 전용**), `accesskit` (`0.25.2`, `MIT OR Apache-2.0`) | `winit`은 외부 의존성으로만 사용해 순수 MIT 유지; 추후 OS 창 제어 최적화 필요 시 `raw-window-handle`(`0.6.2`, `MIT OR Apache-2.0 OR Zlib`) 기반 자체 MIT OS 어댑터로 대체 |
