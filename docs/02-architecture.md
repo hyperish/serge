@@ -9,6 +9,7 @@
 ```
 serge/
   apps/
+    serge-cli/                 # `hyve-serge` 실행 파일 (`hyve`가 호출하는 번들링·개발 서버·네이티브 실행 단계)
     serge-playground/          # 웹(DOM) 및 네이티브(GPU/CPU) 통합 컴포넌트·120fps 쇼케이스 앱
   crates/
     serge/                     # 사용자 진입 크레이트 (단일 의존성 재수출 + prelude)
@@ -66,3 +67,5 @@ serge/
 | `serge-native-cpu` | `vello_cpu` (`0.4.0`, `Apache-2.0 OR MIT`) | `vello`와 동일 씬 모델을 공유하는 SIMD 소프트웨어 래스터라이저로 필수 CPU 폴백 대칭 구현 |
 | `serge-native-text` | `parley` (`0.13.0`, `Apache-2.0 OR MIT`) + `swash` (`0.2.10`, `Apache-2.0 OR MIT`) | Linebender 텍스트 셰이핑·글리프 래스터라이저를 `serge-native-gpu`/`cpu` 아틀라스에 직결 |
 | `serge-platform-*` · `serge-native-sys` | `winit` (`0.31.0-beta.4`, `Apache-2.0` — **포크 없는 외부 의존성 전용**), `accesskit` (`0.25.2`, `MIT OR Apache-2.0`) | `winit`은 외부 의존성으로만 사용해 순수 MIT 유지; 추후 OS 창 제어 최적화 필요 시 `raw-window-handle`(`0.6.2`, `MIT OR Apache-2.0 OR Zlib`) 기반 자체 MIT OS 어댑터로 대체 |
+
+외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): 웹 바인딩 `wasm-bindgen` (`0.2.130`), `wasm-bindgen-futures` (`0.4.80`), `web-sys` (`0.3.107`), `js-sys` (`0.3.107`), 매크로용 `syn` (`3.0.10`), `quote` (`1.0.47`), `proc-macro2` (`1.0.107`) — 모두 `MIT OR Apache-2.0`. 네이티브의 비동기 I/O는 패밀리 공통 런타임 `tokio` (`1.54.1`, `MIT`)를 쓰고, 웹은 브라우저 이벤트 루프를 씁니다(`hyve/docs/02-architecture.md` §2.5). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.
