@@ -44,3 +44,4 @@ pub fn CounterCard() -> Element {
 | 02 | [아키텍처와 크레이트 구조](docs/02-architecture.md) | `apps/`, `crates/` 모노레포 구성, 공통 UI 코어와 Web(`serge-web-*`) / Native(`serge-native-*`) 크레이트 분담 |
 | 03 | [파이프라인과 호환 어댑터](docs/03-adapters-and-pipeline.md) | Leptos형 DOM 파이프라인, GPUI/Rune형 GPU+CPU 폴백 파이프라인, `orbic` 프로덕션 서빙 핸드오프 및 옵트인 웹뷰 어댑터 |
 | 04 | [열린 결정](docs/04-open-questions.md) | `serge` 레포의 미정 사항 목록과 결정 기록 |
+| 05 | [구현 계획](docs/05-implementation-plan.md) | Phase 1 작업 순서와 완료 기준 |
