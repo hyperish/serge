@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-platform-desktop", "crates/serge-router"]
+members = ["crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground"]
 resolver = "3"
 
 [workspace.package]
@@ -31,7 +31,7 @@ serge-web-dom = { path = "crates/serge-web-dom", version = "=0.1.0-alpha.0" }
 # hyve and orbic, unpublished: sibling paths plus the exact prerelease version
 # (`hyperish/docs` `05-development-rules.md` §5).
 hyve = { path = "../hyve/crates/hyve", version = "=0.1.0-alpha.0" }
-orbic = { path = "../orbic/crates/orbic", version = "=0.1.0-alpha.0" }
+orbic = { path = "../orbic/crates/orbic", version = "=0.1.0-alpha.0", default-features = false }
 
 # Pinned base crates (`docs/02-architecture.md` §3, §7.8 착수 방식).
 taffy = { version = "=0.15.1", default-features = false, features = ["std", "flexbox", "block_layout", "taffy_tree"] }

@@ -118,8 +118,14 @@ impl TextSystem {
         b.push_default(StyleProperty::FontWeight(FontWeight::new(f32::from(
             weight,
         ))));
+        // The web target's `line-height: 1.25`.
+        b.push_default(StyleProperty::LineHeight(
+            parley::LineHeight::FontSizeRelative(1.25),
+        ));
         let mut layout: parley::Layout<()> = b.build(text);
-        layout.break_all_lines(max_width.map(|w| w.max(1.0).ceil()));
+        // Half a pixel of slack: a box sized to a measured (rounded-up)
+        // width must not wrap its own text.
+        layout.break_all_lines(max_width.map(|w| (w.max(1.0) + 0.5).ceil()));
         let mut runs = Vec::new();
         for line in layout.lines() {
             for item in line.items() {
@@ -164,7 +170,7 @@ impl TextSystem {
         max_width: Option<f32>,
     ) -> (f32, f32) {
         let l = self.layout(text, size, weight, max_width);
-        (l.width, l.height)
+        (l.width.ceil(), l.height.ceil())
     }
 }
 

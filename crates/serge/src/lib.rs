@@ -17,14 +17,18 @@
 //! }
 //! ```
 
+pub use serge_adapter_client::{RemoteTransport, SharedRingBuf};
+/// The `tokio` runtime native UI tasks and remote transports run on.
+#[cfg(not(target_arch = "wasm32"))]
+pub use serge_core::runtime;
 pub use serge_core::{
     Callback, Cursor, Element, FrameSource, IntoElement, Kind, PaintCmd, PaintCtx, Point, Rect,
-    RouteComponent, RouteParams, ScenePrimitive, View, spawn,
+    RouteComponent, RouteParams, ScenePrimitive, View, sleep, spawn,
 };
 pub use serge_macros::{component, ui};
 pub use serge_router::{
     Assembled, AssemblyError, AuthState, Guard, History, MemoryHistory, RequireAuth, Router,
-    SergeApp, UiFeature, back, feature, navigate,
+    SergeApp, UiFeature, back, feature, location, navigate,
 };
 
 /// Runs an app on the current target: a window on desktop, the page on the
@@ -55,6 +59,8 @@ impl Run for SergeApp {
                 std::process::exit(1);
             }
         }
+        #[cfg(target_arch = "wasm32")]
+        serge_web_dom::run(app);
     }
 }
 pub use serge_style::{Color, Layout, Length, Theme, pct, px, rem};
@@ -64,6 +70,22 @@ pub use serge_style::{Color, Layout, Length, Theme, pct, px, rem};
 #[cfg(not(target_arch = "wasm32"))]
 pub mod testing {
     pub use serge_native::{Headless, Key};
+    pub use serge_native_cpu::{CpuRenderer, Frame};
+
+    /// Writes `frame` as a binary PPM (any image viewer, `sips`, ImageMagick).
+    pub fn write_ppm(frame: &Frame, path: &std::path::Path) -> std::io::Result<()> {
+        let mut out = format!("P6\n{} {}\n255\n", frame.width, frame.height).into_bytes();
+        for p in frame.rgba.as_chunks::<4>().0 {
+            out.extend_from_slice(&p[..3]);
+        }
+        std::fs::write(path, out)
+    }
+}
+
+/// Testing in a browser: mount into an element and drive the real DOM.
+#[cfg(target_arch = "wasm32")]
+pub mod testing {
+    pub use serge_web_dom::{Mounted, mount, page_root};
 }
 
 /// Built-in widgets and their style properties.
@@ -74,15 +96,20 @@ pub mod widgets {
 /// Everything most UI code needs: `use serge::prelude::*;` (next to
 /// `use hyve::prelude::*;`).
 pub mod prelude {
+    // Alignment is `Align::Center` etc.: lowercase constants such as
+    // `start`/`end` would turn ordinary `let start = ..` bindings into
+    // constant patterns in every file that imports the prelude.
     pub use crate::widgets::{
         Button, Canvas, Card, Checkbox, Input, Link, ProgressBar, Slider, Stack, Styled, Text,
-        View, center, end, h_stack, space_between, start, stretch, v_stack,
+        View, h_stack, v_stack,
     };
     pub use crate::{
-        AuthState, Callback, Color, Element, FrameSource, PaintCtx, Point, Rect, RequireAuth, Run,
-        SergeApp, UiFeature, back, component, feature, navigate, px, spawn, ui,
+        AuthState, Callback, Color, Element, FrameSource, PaintCtx, Point, Rect, RemoteTransport,
+        RequireAuth, Run, SergeApp, SharedRingBuf, UiFeature, back, component, feature, location,
+        navigate, px, sleep, spawn, ui,
     };
     pub use serge_core::{native, web};
+    pub use serge_style::{Align, Layout};
 }
 
 #[doc(hidden)]

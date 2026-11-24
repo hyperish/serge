@@ -25,16 +25,43 @@ pub trait IntoProp<T> {
     fn into_prop(self) -> crate::element::Prop<T>;
 }
 
-impl<T, V: Into<T>> IntoProp<T> for Lit<V> {
-    fn into_prop(self) -> crate::element::Prop<T> {
-        crate::element::Prop::Static(self.0.into())
+/// A value a property of type `T` takes: `T` itself, or a string slice for
+/// `String`. Deliberately narrower than `Into`, so that unsuffixed literals
+/// take the property's type (`font_weight: 700` is a `u16`, `grow: 1.0` an
+/// `f32`) instead of defaulting to `i32`/`f64`.
+pub trait PropValue<T> {
+    /// The value.
+    fn into_value(self) -> T;
+}
+
+impl<T> PropValue<T> for T {
+    fn into_value(self) -> T {
+        self
     }
 }
 
-impl<T: 'static, V: Into<T>, F: FnOnce() -> V + Clone + 'static> IntoProp<T> for Dyn<F> {
+impl PropValue<String> for &str {
+    fn into_value(self) -> String {
+        self.to_owned()
+    }
+}
+
+impl PropValue<String> for &String {
+    fn into_value(self) -> String {
+        self.clone()
+    }
+}
+
+impl<T, V: PropValue<T>> IntoProp<T> for Lit<V> {
+    fn into_prop(self) -> crate::element::Prop<T> {
+        crate::element::Prop::Static(self.0.into_value())
+    }
+}
+
+impl<T: 'static, V: PropValue<T>, F: FnOnce() -> V + Clone + 'static> IntoProp<T> for Dyn<F> {
     fn into_prop(self) -> crate::element::Prop<T> {
         let f = self.0;
-        crate::element::Prop::Dynamic(Rc::new(move || (f.clone())().into()))
+        crate::element::Prop::Dynamic(Rc::new(move || (f.clone())().into_value()))
     }
 }
 
@@ -45,15 +72,15 @@ pub trait IntoArg<T> {
     fn into_arg(self) -> T;
 }
 
-impl<T, V: Into<T>> IntoArg<T> for Lit<V> {
+impl<T, V: PropValue<T>> IntoArg<T> for Lit<V> {
     fn into_arg(self) -> T {
-        self.0.into()
+        self.0.into_value()
     }
 }
 
-impl<T, V: Into<T>, F: FnOnce() -> V> IntoArg<T> for Dyn<F> {
+impl<T, V: PropValue<T>, F: FnOnce() -> V> IntoArg<T> for Dyn<F> {
     fn into_arg(self) -> T {
-        (self.0)().into()
+        (self.0)().into_value()
     }
 }
 

@@ -22,6 +22,6 @@ pub use route::{FromView, RouteComponent, RouteParams};
 pub use target_attrs::{native, web};
 #[cfg(not(target_arch = "wasm32"))]
 pub use view::runtime;
-pub use view::{Executor, LocalFuture, TaskHandle, View, inject, install_executor, spawn};
+pub use view::{Executor, LocalFuture, TaskHandle, View, inject, install_executor, sleep, spawn};
 
 pub use serge_style as style;

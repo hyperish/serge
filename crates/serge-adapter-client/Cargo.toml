@@ -1,0 +1,32 @@
+[package]
+name = "serge-adapter-client"
+description = "Client side of serge: #[server] calls over HTTP (Dual-Rail, cancellation) and shared ring buffers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+hyve.workspace = true
+serge-core.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bytes.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
+tokio = { workspace = true, features = ["rt"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+    "AbortController", "AbortSignal", "Headers", "Request", "RequestInit", "Response", "Window",
+] }
+
+[lints]
+workspace = true

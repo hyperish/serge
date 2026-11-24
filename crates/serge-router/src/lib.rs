@@ -155,9 +155,12 @@ pub struct SergeApp {
     scope: Scope,
     features: Vec<UiFeature>,
     root: Option<Render>,
+    layout: Option<Layout>,
     start: String,
     title: String,
 }
+
+type Layout = Rc<dyn Fn(Element) -> Element>;
 
 impl fmt::Debug for SergeApp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -181,9 +184,18 @@ impl SergeApp {
             scope: Scope::root(),
             features: Vec::new(),
             root: None,
+            layout: None,
             start: "/".into(),
             title: "serge".into(),
         }
+    }
+
+    /// Wraps every screen: `layout(screen)` is built once, at mount, with
+    /// the current screen as the element to place (a navigation bar around
+    /// it, say). Without one the screen is the whole app.
+    pub fn layout(mut self, layout: impl Fn(Element) -> Element + 'static) -> Self {
+        self.layout = Some(Rc::new(layout));
+        self
     }
 
     /// Provides `value` to the whole app.
@@ -303,6 +315,7 @@ impl SergeApp {
         Ok(Assembled {
             scope: self.scope,
             title: self.title,
+            layout: self.layout,
             router,
         })
     }
@@ -575,6 +588,7 @@ pub struct Assembled {
     pub scope: Scope,
     /// The window or page title.
     pub title: String,
+    layout: Option<Layout>,
     router: Rc<Router>,
 }
 
@@ -620,15 +634,30 @@ impl Assembled {
             let r2 = r.clone();
             *b.borrow_mut() = Some(Rc::new(move || r2.back()));
         });
-        region(move || {
+        let loc = r.location();
+        LOCATION.with(|l| l.set(Some(loc)));
+        let screens = region(move || {
             let address = r.path();
             r.screen(&address)
-        })
+        });
+        match &self.layout {
+            Some(layout) => layout(screens),
+            None => screens,
+        }
     }
 }
 
 thread_local! {
     static BACK: RefCell<Option<Rc<dyn Fn()>>> = const { RefCell::new(None) };
+    static LOCATION: std::cell::Cell<Option<Signal<String>>> = const { std::cell::Cell::new(None) };
+}
+
+/// The current address (`/projects/7?tab=a`), tracked: a navigation bar
+/// that reads it updates on navigation. `"/"` before the app is mounted.
+pub fn location() -> String {
+    LOCATION
+        .with(|l| l.get())
+        .map_or_else(|| "/".to_owned(), |s| s.get())
 }
 
 /// Goes back one screen.

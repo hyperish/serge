@@ -69,7 +69,7 @@ pub fn project_feature() -> UiFeature {
 pub fn ProjectEditorCard(store: Ctx<ProjectDraftStore>) -> Element {
     // 라우트 진입 컴포넌트는 주입(`Ctx<T>`)과 라우트 파라미터만 받는다. `Signal<T>`는 `Copy` 핸들이라 꺼내 써도 된다.
     let exposure = store.exposure;
-    let mut liked = signal(false);
+    let liked = signal(false);
 
     ui! {
         Card {

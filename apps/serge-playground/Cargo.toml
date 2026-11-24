@@ -1,17 +1,40 @@
 [package]
 name = "serge-playground"
+description = "Runs serge's documented examples on the web and desktop, against an orbic server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Interactive MVP showcase binary for serge Web DOM and Native GPU/CPU pipelines"
+publish = false
+
+[features]
+## The app's `server` feature: keeps `#[server]` bodies and adds the orbic
+## backend (the server binary, and the single-binary desktop build).
+server = ["dep:orbic", "orbic/server", "dep:tokio"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "playground-server"
+path = "src/bin/server.rs"
+required-features = ["server"]
 
 [dependencies]
-hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
-orbic = { git = "https://github.com/hyperish/orbic.git", branch = "main" }
-serge = { path = "../../crates/serge" }
+hyve.workspace = true
+orbic = { workspace = true, optional = true }
+serge.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, optional = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+
+[dev-dependencies]
+hyve = { workspace = true, features = ["test"] }
 
 [lints]
 workspace = true

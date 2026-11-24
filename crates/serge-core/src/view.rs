@@ -203,3 +203,27 @@ pub fn runtime() -> &'static tokio::runtime::Runtime {
             .expect("serge: failed to start the tokio runtime")
     })
 }
+
+/// Waits `duration` without blocking the UI thread (a timer on serge's
+/// runtime natively, `setTimeout` on the web). For UI tasks: polling,
+/// animations, demo producers.
+pub async fn sleep(duration: std::time::Duration) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let timer = {
+            let _rt = runtime().enter();
+            tokio::time::sleep(duration)
+        };
+        timer.await;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let ms = i32::try_from(duration.as_millis()).unwrap_or(i32::MAX);
+        let p = js_sys::Promise::new(&mut |resolve, _| {
+            if let Some(w) = web_sys::window() {
+                let _ = w.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+            }
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(p).await;
+    }
+}

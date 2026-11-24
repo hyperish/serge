@@ -13,14 +13,30 @@ categories = ["gui", "web-programming"]
 
 [dependencies]
 hyve.workspace = true
+serge-adapter-client.workspace = true
 serge-core.workspace = true
 serge-macros.workspace = true
 serge-router.workspace = true
 serge-style.workspace = true
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+serge-web-dom.workspace = true
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 serge-native.workspace = true
+serge-native-cpu.workspace = true
 serge-platform-desktop.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-bindgen-test.workspace = true
+web-sys = { workspace = true, features = [
+    "CanvasRenderingContext2d", "Document", "Element", "Event", "EventInit", "HtmlCanvasElement",
+    "HtmlElement", "HtmlInputElement", "ImageData", "KeyboardEvent", "KeyboardEventInit",
+    "Location", "NodeList", "Window",
+] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 serge-native-cpu.workspace = true
