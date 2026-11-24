@@ -62,7 +62,7 @@ cargo run -p serge-cli -- preview --web
 **테스트**:
 
 ```sh
-cargo test --workspace                                   # 네이티브 헤드리스·CPU 스냅샷·CLI·데브 서버
+cargo test --workspace                                   # 네이티브 헤드리스·CPU 스냅샷·CLI·데브 서버 (CLI 테스트가 웹 번들을 빌드하므로 위의 wasm 타깃과 wasm-bindgen CLI 필요)
 cargo test -p serge-playground --features server         # 실제 orbic 서버와 원격·인프로세스 호출
 CHROMEDRIVER=<chromedriver 경로> cargo test --target wasm32-unknown-unknown -p serge --test web   # 헤드리스 Chrome의 DOM
 ```

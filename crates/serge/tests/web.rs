@@ -311,3 +311,68 @@ async fn links_and_history_drive_the_router() {
         start
     );
 }
+
+#[model]
+#[derive(Debug, Clone, PartialEq)]
+pub struct Wait {
+    pub millis: u32,
+}
+
+/// In this (client) build only the call stub remains.
+#[server(POST "/slow")]
+pub async fn slow_call(input: Wait) -> HyveResult<String> {
+    Ok(format!("{}", input.millis))
+}
+
+#[component]
+pub fn SlowButton() -> Element {
+    let status = signal(String::from("idle"));
+    ui! {
+        Stack {
+            Text { "{status()}" }
+            Button {
+                text: "Call",
+                clicked => async move {
+                    status.set("calling".into());
+                    let r = slow_call(Wait { millis: 5000 }).await;
+                    status.set(format!("{r:?}"));
+                }
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+async fn unmounting_a_view_aborts_its_fetch() {
+    // A fetch that never answers and records its abort signal.
+    js_sys::eval(
+        "window.__serge_fetch = window.fetch; window.__aborted = false; window.__url = null;
+         window.fetch = (req) => new Promise((_, reject) => {
+           window.__url = req.url;
+           req.signal.addEventListener('abort', () => { window.__aborted = true; reject(new DOMException('aborted', 'AbortError')); });
+         });",
+    )
+    .unwrap();
+    let scope = Scope::root();
+    hyve::api::provide_transport(&scope, serge::RemoteTransport::new("/v1").into_arc());
+    let c = container();
+    let m = mount(&c, scope, || ui! { SlowButton {} });
+    find(&c, ".serge-button", "Call").click();
+    sleep(20).await;
+    assert_eq!(texts(&c, ".serge-text"), ["calling"]);
+    let url = js_sys::eval("window.__url").unwrap().as_string().unwrap();
+    assert!(url.ends_with("/v1/slow"), "{url}");
+    assert_eq!(
+        js_sys::eval("window.__aborted").unwrap().as_bool(),
+        Some(false)
+    );
+    m.unmount();
+    sleep(20).await;
+    let aborted = js_sys::eval("window.__aborted").unwrap().as_bool();
+    js_sys::eval("window.fetch = window.__serge_fetch;").unwrap();
+    assert_eq!(
+        aborted,
+        Some(true),
+        "unmounting aborted the in-flight fetch"
+    );
+}

@@ -51,10 +51,10 @@ SSR/SSG, 적응형 웹 UI, 영속 시그널, 데스크톱 시스템 API, 공유 
 | 1 `serge-core` | 구현 | 뷰 트리, 위젯, 뷰 스코프·작업·취소, `PaintCtx`·`ScenePrimitive`, `FromView`(`Ctx`·`Path`·`Query`) |
 | 2 `serge-macros` | 구현, 컴파일 실패 테스트 **미완** | 문서 예시가 그대로 컴파일(`crates/serge/tests/macros.rs`). 알 수 없는 위젯·빠진 `key`·깨진 문법의 진단 테스트는 아직 없음 |
 | 3 `serge-style` | 구현 | 토큰(밝은·어두운 테마), 스타일 IR, CSS 출력 |
-| 4 `serge-router` | 구현 | 가드 이동, 화면 전환 시 진행 중 호출 취소, 기능 스코프 유지, 조립 오류(`crates/serge/tests/app.rs`) |
+| 4 `serge-router` | 구현 | 가드 이동, 화면 전환 시 진행 중 호출 취소, 기능 스코프 유지, 조립 오류(`crates/serge/tests/app.rs`), 프로퍼티가 시그널을 읽는 컴포넌트의 재생성(`crates/serge/tests/native.rs`) |
 | 5 `serge-web-dom`, `serge-web-dev` | 구현, 템플릿 복제·HMR **미완** | 헤드리스 Chrome에서 DOM 테스트(`crates/serge/tests/web.rs`), 데브 서버 테스트, 실제 브라우저로 쇼케이스 전체 흐름(링크·뒤로 가기·입력·`#[server]`·캔버스·라이브 리로드) 확인 |
 | 6 네이티브 | CPU 경로 구현, GPU 경로 **미완** | 헤드리스 런타임 테스트, 1×·2× CPU 스냅샷, 쇼케이스 전 화면 렌더. 실제 창을 열어 표시한 프레임을 확인했으나 화면 캡처·실제 입력은 **미검증**(실행 환경에 화면 기록·손쉬운 사용 권한 없음) |
-| 7 `serge-adapter-client` | 구현, 락 없는 링·TLS **미완** | 루프백 `orbic::serve`에 원격 호출: 두 레일과 스키마 불일치 폴백에서 인프로세스와 같은 결과·같은 오류, 스코프 해제 시 취소(`apps/serge-playground/tests/backend.rs`) |
+| 7 `serge-adapter-client` | 구현, 락 없는 링·TLS **미완** | 루프백 `orbic::serve`에 원격 호출: 두 레일과 스키마 불일치 폴백에서 인프로세스와 같은 결과·같은 오류, 스코프 해제 시 취소(`apps/serge-playground/tests/backend.rs`). 웹은 뷰를 언마운트하면 진행 중 `fetch`가 중단됨(`crates/serge/tests/web.rs`) |
 | 8 `serge`, 쇼케이스, `hyve-serge` | 구현 | `hyve-serge stages`·`build`·`preview`, `hyve build --debug`가 실제 `hyve-serge`를 거쳐 웹 번들을 만듦. 의존 경계 테스트(`crates/serge/tests/deps.rs`) |
 
 §3 완료 기준 중 남은 것: 컴파일 실패 진단 테스트, GPU 경로와 렌더러 대칭(GPU·CPU 결과 비교), 포크 검증 기록, CI 실행과 패키징(`hyve`·`orbic` 프리릴리스 뒤), 상태 보존 HMR(Phase 2).

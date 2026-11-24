@@ -231,3 +231,45 @@ fn backend_policy() {
         Err(BackendError::Unknown(_))
     ));
 }
+
+#[component]
+pub fn Tally(label: String) -> Element {
+    let mut n = signal(0);
+    // Two closures use the owned `label`: clone first (the closure rule).
+    let button = format!("+1 {label}");
+    ui! {
+        Stack {
+            Text { "{label}: {n()}" }
+            Button { text: button, clicked => { n += 1; } }
+        }
+    }
+}
+
+#[test]
+fn components_rebuilt_by_their_props_start_over() {
+    let round = signal(1);
+    let h = Headless::new(400.0, 400.0, move || {
+        ui! {
+            Stack {
+                Tally { label: "fixed" }
+                Tally { label: format!("round {}", round()) }
+            }
+        }
+    });
+    h.click_text("+1 fixed");
+    h.click_text("+1 round 1");
+    assert!(
+        h.shows("fixed: 1") && h.shows("round 1: 1"),
+        "{:?}",
+        h.texts()
+    );
+    // A prop that reads a signal re-creates its component (local state is
+    // gone); a component with fixed props keeps its state.
+    round.set(2);
+    h.settle();
+    assert!(
+        h.shows("fixed: 1") && h.shows("round 2: 0"),
+        "{:?}",
+        h.texts()
+    );
+}
