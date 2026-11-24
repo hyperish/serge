@@ -18,6 +18,7 @@
 4. **GPU 실행 또는 CPU 폴백 (`serge-native-gpu` / `serge-native-cpu`)**:
    - **기본 경로 (`serge-native-gpu`)**: 인스턴스 버퍼와 아틀라스를 통해 최소 드로우콜로 GPU에서 120fps 합성.
    - **필수 폴백 경로 (`serge-native-cpu`)**: GPU 초기화 실패, 가상 디스플레이, 헤드리스 CI 테스트 환경에서 SIMD 최적화된 CPU 래스터라이저가 동일한 `ScenePrimitive`를 픽셀 버퍼에 렌더링.
+   - **전환 정책 (확정, 2026-11-24)**: GPU 디바이스를 만들지 못하면 자동으로 CPU 경로로 전환합니다. 환경 변수 `HYPERISH_RENDER_BACKEND`에 `cpu` 또는 `gpu`를 명시할 수 있고, `gpu`를 명시했는데 실패하면 폴백하지 않고 오류를 냅니다. 헤드리스 테스트는 CPU 경로를 씁니다. 명시한 환경 변수가 항상 우선하고, 변수가 없을 때만 헤드리스 테스트의 CPU 기본값과 자동 전환이 적용됩니다. 가상 디스플레이는 따로 감지하지 않고 디바이스 생성 실패로 다룹니다. 실행 중 디바이스를 잃었을 때의 전환은 제안입니다.
 
 ## 2. 호환 어댑터 및 플랫폼 바인딩
 
@@ -31,6 +32,14 @@
 | **3-Tier 통신 어댑터** | `serge-adapter-client` | ① **Tier 1 인프로세스**(`Signal<T>` + Lock-Free `SharedRingBuf`), ② **Tier 2 로컬 IPC**(OS `shm`/`mmap` Shared Ring Buffer — `#[repr(C)]` POD·찢어짐 방지 스냅샷·App Group 샌드박스 준수 + Unix Socket/Named Pipe `hyve-serde` 바이너리 RPC), ③ **Tier 3 원격 서버**(Dual-Rail: 고속 레일은 `hyve-serde` 바이너리를 HTTP 본문·WebTransport로 나르고 차단 시 같은 프레임을 WS로 운반, 표준 레일은 HTTP/JSON+WS. `?ticket=` 핸드셰이크 및 폴백 `seq` 연속 복구) 통합 실행 및 뷰 언마운트 시 구조적 취소 전파 |
 | **옵트인 웹뷰 어댑터** | `serge-adapter-webview` | 네이티브 UI는 기본적으로 웹뷰를 절대 쓰지 않으나, 네이티브 앱 일부 슬롯에 웹 화면을 띄워야 할 때 **같은 레포의 `serge-web-dom` 산출물을 네이티브 웹뷰 서피스로 마운트하고 `hyve-serde` IPC로 상태를 동기화하는 내부 옵트인 어댑터** |
 | **프로덕션 웹 서빙 접점** | `orbic::orbic-adapter-serge` | `serge` 웹 타깃의 프로덕션 서빙 및 SSR 호스팅은 `orbic`이 담당 (§3 참조) |
+
+### 2.1 `serge-adapter-client`의 Phase 1 범위 (제안, 2026-11-24)
+
+- **Tier 1 인프로세스**: 시그널과 `SharedRingBuf` 연결에 더해, `hyve-api`의 전송 트레이트를 구현한 인프로세스 전송(`orbic`이 제공)을 그대로 받아 쓸 수 있습니다. `serge`는 `orbic`에 의존하지 않고 트레이트만 봅니다.
+- **Tier 3 원격 요청-응답**: `hyve/docs/03-adapters-and-pipeline.md` §3의 전송 계약을 구현한 원격 전송입니다. 기준 URL(출처와 경로 접두어)을 설정으로 받습니다.
+- **자격 증명**: 웹에서는 브라우저가 세션 쿠키를 보내도록 요청하고, 앱이 세션 응답에서 받은 CSRF 토큰을 전송에 설정하면 상태를 바꾸는 호출에 `X-CSRF-Token`으로 붙입니다. 네이티브에서는 앱이 설정한 `Bearer` 토큰을 붙이고, 토큰은 OS 보안 저장소에 둡니다. 로그인 화면과 세션을 얻는 호출은 앱이 만듭니다.
+- **개발 서버**: 웹 번들은 `serge-web-dev`가, API는 `orbic` 개발 서버가 서빙하므로 출처가 다릅니다. `serge-web-dev`는 `hyve.toml`의 `[serge] api_proxy`에 적은 경로 접두어를 백엔드로 프록시해 브라우저에서는 같은 출처로 보이게 합니다.
+- **도구 단계**: `hyve preview`와 `hyve build`가 호출하는 웹 번들링·개발 서버·네이티브 실행은 `serge`가 제공하는 `hyve-serge` 실행 파일의 단계입니다(`hyve/docs/01-dx-and-dsl.md` §2).
 
 ## 3. `serge` → `orbic` 프로덕션 서빙 핸드오프 계약 (제안)
 
