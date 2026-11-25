@@ -57,7 +57,7 @@ SSR/SSG, 적응형 웹 UI, 영속 시그널, 데스크톱 시스템 API, 공유 
 | 7 `serge-adapter-client` | 구현 | 루프백 `orbic::serve`에 원격 호출: 두 레일과 스키마 불일치 폴백에서 인프로세스와 같은 결과·같은 오류, 스코프 해제 시 취소(`apps/serge-playground/tests/backend.rs`). `https://`(2026-11-25): 테스트 CA와 IP SAN 인증서로 TLS를 받는 앞단을 거쳐 같은 결과·같은 오류·폴백·취소, 운영체제가 모르는 CA와 다른 이름의 인증서는 백엔드에 닿기 전에 거부되고 표준 레일로 다시 보내지 않음, 잘못된 PEM은 이유와 함께 실패(`apps/serge-playground/tests/tls.rs`). 공개 CA가 서명한 실제 호스트를 운영체제 검증기로 부르는 것, Windows, 모바일의 검증기 초기화는 **미검증**. 웹은 뷰를 언마운트하면 진행 중 `fetch`가 중단됨(`crates/serge/tests/web.rs`). `SharedRingBuf`는 `hyve-core`의 락 없는 링 위(2026-11-25): 쓰는 스레드와 동시에 읽어도 찢어진·순서가 뒤바뀐 샘플이 없음(`crates/serge-adapter-client/src/ring.rs`) |
 | 8 `serge`, 쇼케이스, `hyve-serge` | 구현 | `hyve-serge stages`·`build`·`preview`, `hyve build --debug`가 실제 `hyve-serge`를 거쳐 웹 번들을 만듦. `hyve preview --web` 하나로 웹 데브 서버와 orbic 백엔드(`playground-server`)가 함께 뜨고, 실제 브라우저 워크스루 8단계 통과, 서버 소스 수정 시 재기동, Ctrl-C·한 단계 실패·`hyve` 강제 종료 후 남는 프로세스와 포트가 없음을 확인(2026-11-25, 임시 위치에 `cargo install --path`로 설치한 도구로도 확인). 표준 입력이 닫히면 미리보기가 멈추는 것은 `apps/serge-cli/tests/cli.rs`가 확인. 의존 경계 테스트(`crates/serge/tests/deps.rs`) |
 
-§3 완료 기준 중 남은 것: 포크 검증(아래 기록은 달라진 점까지, 소스 편입과 원본 대비 측정은 **미완**), 패키징(`hyve`·`orbic` 프리릴리스 뒤), 상태 보존 HMR(Phase 2). CI는 `feat/**` 브랜치 push에서 돌고, 리눅스는 소프트웨어 Vulkan(Mesa lavapipe), macOS는 Metal로 GPU 비교를 건너뛰지 않고 실행합니다(`HYPERISH_TEST_GPU=require`).
+§3 완료 기준 중 남은 것: 포크 검증(아래 기록은 달라진 점까지, 소스 편입과 원본 대비 측정은 **미완**), 상태 보존 HMR(Phase 2). 패키징은 CI가 공개 크레이트 15개를 패키징하고 각 패키지만으로 빌드해 확인합니다(아직 배포되지 않은 `hyve` 버전은 형제 체크아웃을 `[patch.crates-io]`로 대신 씀, 2026-11-25). CI는 `feat/**` 브랜치 push에서 돌고, 리눅스는 소프트웨어 Vulkan(Mesa lavapipe), macOS는 Metal로 GPU 비교를 건너뛰지 않고 실행합니다(`HYPERISH_TEST_GPU=require`).
 
 ### 포크 기록 (2026-11-25)
 

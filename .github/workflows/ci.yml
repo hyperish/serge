@@ -74,6 +74,17 @@ jobs:
         run: cargo test -p serge-playground --features server --locked
         env:
           HYPERISH_TEST_GPU: require
+      # Every public crate packages and builds from its package alone
+      # (docs/05-implementation-plan.md §3, CI). A hyve version that is not
+      # on crates.io yet comes from the sibling checkout, as a patch
+      # (hyperish/docs 05-development-rules.md §5); not `--locked`, since
+      # the patch entries a package does not use are written to Cargo.lock.
+      - name: Package the public crates
+        run: |
+          cargo metadata --manifest-path ../hyve/Cargo.toml --no-deps --format-version 1 \
+            | jq -r '"[patch.crates-io]", (.packages[] | select(.publish == null) | "\(.name) = { path = \"\(.manifest_path | rtrimstr("/Cargo.toml"))\" }")' \
+            > "$RUNNER_TEMP/siblings.toml"
+          cargo package --workspace --exclude serge-playground --config "$RUNNER_TEMP/siblings.toml"
 
   browser:
     name: Web target in headless Chrome
