@@ -2287,6 +2287,7 @@ dependencies = [
 name = "orbic-db"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "hyve",
  "hyve-api",
  "hyve-core",
  "hyve-serde",
