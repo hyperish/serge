@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "hyve"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-config",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-api"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "hyve-serde",
@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-config"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "hyve-diagnostics",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-core"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytemuck",
  "getrandom 0.4.3",
@@ -1256,14 +1256,14 @@ dependencies = [
 
 [[package]]
 name = "hyve-diagnostics"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "ariadne",
 ]
 
 [[package]]
 name = "hyve-macros"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-diagnostics",
  "proc-macro2",
@@ -1273,7 +1273,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-parser"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-diagnostics",
  "winnow",
@@ -1281,7 +1281,7 @@ dependencies = [
 
 [[package]]
 name = "hyve-serde"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "rkyv",
@@ -1289,11 +1289,11 @@ dependencies = [
 
 [[package]]
 name = "hyve-state"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "hyve-validate"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
 ]
@@ -2222,7 +2222,7 @@ dependencies = [
 
 [[package]]
 name = "orbic"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytes",
  "http",
@@ -2239,7 +2239,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-adapter-http"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytes",
  "http",
@@ -2253,7 +2253,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-auth"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "getrandom 0.4.3",
  "hyve",
@@ -2264,7 +2264,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-cache"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-core",
@@ -2273,7 +2273,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-core"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-core",
@@ -2285,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-db"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-api",
  "hyve-core",
@@ -2296,7 +2296,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-macros"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-diagnostics",
  "hyve-parser",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-openapi"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "orbic-adapter-http",
@@ -2318,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "orbic-sql-cache"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve-core",
  "hyve-serde",
@@ -3066,7 +3066,7 @@ dependencies = [
 
 [[package]]
 name = "serge"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "js-sys",
@@ -3090,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "serge-adapter-client"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "bytes",
  "http",
@@ -3111,14 +3111,14 @@ dependencies = [
 
 [[package]]
 name = "serge-cli"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serge-web-dev",
 ]
 
 [[package]]
 name = "serge-core"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "js-sys",
@@ -3130,7 +3130,7 @@ dependencies = [
 
 [[package]]
 name = "serge-macros"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3139,7 +3139,7 @@ dependencies = [
 
 [[package]]
 name = "serge-native"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "serge-core",
@@ -3150,7 +3150,7 @@ dependencies = [
 
 [[package]]
 name = "serge-native-cpu"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serge-core",
  "serge-native",
@@ -3162,7 +3162,7 @@ dependencies = [
 
 [[package]]
 name = "serge-native-gpu"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serge-core",
  "serge-native",
@@ -3174,7 +3174,7 @@ dependencies = [
 
 [[package]]
 name = "serge-native-layout"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serge-style",
  "taffy",
@@ -3182,7 +3182,7 @@ dependencies = [
 
 [[package]]
 name = "serge-native-text"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "fontique",
  "parley",
@@ -3192,7 +3192,7 @@ dependencies = [
 
 [[package]]
 name = "serge-platform-desktop"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "serge-core",
@@ -3206,7 +3206,7 @@ dependencies = [
 
 [[package]]
 name = "serge-playground"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "orbic",
@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "serge-router"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "serge-core",
@@ -3228,18 +3228,18 @@ dependencies = [
 
 [[package]]
 name = "serge-style"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 
 [[package]]
 name = "serge-web-dev"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "serge-web-dom"
-version = "0.1.0-alpha.0"
+version = "0.1.0-alpha.1"
 dependencies = [
  "hyve",
  "js-sys",
