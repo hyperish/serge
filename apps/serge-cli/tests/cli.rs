@@ -64,6 +64,11 @@ fn builds_the_playground_for_the_browser() {
     assert_eq!(&wasm[..4], b"\0asm");
     let html = std::fs::read_to_string(out_dir.join("index.html")).unwrap();
     assert!(html.contains("serge-root") && html.contains("/app.js"));
+    // No `/favicon.ico` request (a 404 in the console) unless the app adds one.
+    assert!(
+        html.contains(r#"<link rel="icon" href="data:,">"#),
+        "{html}"
+    );
     // A client build: no server bodies or database code in the module.
     let text = String::from_utf8_lossy(&wasm);
     assert!(
