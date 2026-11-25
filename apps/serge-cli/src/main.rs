@@ -7,6 +7,7 @@
 //! hyve-serge preview [--web | --native] [-p <package>] [--port <n>]
 //!                    [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]
 //! hyve-serge preview --native [-p <package>] [--features <a,b>] [--release]
+//! hyve-serge --version | --help
 //! ```
 //!
 //! `stages` answers `hyve` (first line: serge's version, then one stage per
@@ -30,6 +31,7 @@ use serge_web_dev::{BuildOptions, DevServer, Error, Proxy, Workspace};
 
 const USAGE: &str = "usage:
   hyve-serge stages
+  hyve-serge --version | --help
   hyve-serge build [--debug] [-p <package>] [--features <a,b>] [--out <dir>]
   hyve-serge preview [--web | --native] [-p <package>] [--port <n>] [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]";
 
@@ -114,8 +116,12 @@ fn main() -> ExitCode {
         }
         Some((s, rest)) if s == "build" => build(rest),
         Some((s, rest)) if s == "preview" => preview(rest),
-        Some((s, _)) if s == "--help" || s == "-h" => {
+        Some((s, rest)) if (s == "--help" || s == "-h") && rest.is_empty() => {
             println!("{USAGE}");
+            Ok(())
+        }
+        Some((s, rest)) if (s == "--version" || s == "-V") && rest.is_empty() => {
+            println!("hyve-serge {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Some((s, _)) => Err(Fail::Usage(format!("unknown stage `{s}`"))),

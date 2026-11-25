@@ -19,6 +19,19 @@ fn stages_answer_hyve() {
     let text = String::from_utf8(out.stdout).unwrap();
     let lines: Vec<_> = text.lines().collect();
     assert_eq!(lines, [env!("CARGO_PKG_VERSION"), "build", "preview"]);
+    for flag in ["--version", "-V"] {
+        let out = hyve_serge(&[flag]);
+        assert!(out.status.success(), "{flag}");
+        assert_eq!(
+            String::from_utf8(out.stdout).unwrap(),
+            format!("hyve-serge {}\n", env!("CARGO_PKG_VERSION"))
+        );
+    }
+    for flag in ["--help", "-h"] {
+        let out = hyve_serge(&[flag]);
+        assert!(out.status.success(), "{flag}");
+        assert!(String::from_utf8_lossy(&out.stdout).starts_with("usage:"));
+    }
 }
 
 #[test]
@@ -26,6 +39,7 @@ fn usage_errors_exit_2() {
     for args in [
         &[][..],
         &["deploy"],
+        &["--version", "x"],
         &["build", "--port", "1"],
         &["preview", "--web", "--native"],
     ] {
