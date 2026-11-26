@@ -1,17 +1,17 @@
-# 04. 열린 결정 (serge)
+# 04. 결정 기록 (serge)
 
-> 상태: "열려 있는 결정"은 **미정**(방향은 **제안**), "결정됨"은 **확정** 기록(제안으로 추가한 내용은 항목 안에 표시) · 기준일: 2026-11-25
+> 기준일 2026-11-26 · 결정은 **확정**이며, 이전 기록의 제안과 구현 상태는 각 항목에 표시합니다.
 
-`serge` 레포 범위의 미정 사항 목록입니다. 범용 명세 전체의 결정 기록은 [`hyperish/docs/docs/07-open-questions.md`](https://github.com/hyperish/docs/blob/main/docs/07-open-questions.md)에서 추적합니다.
+`serge`의 설계 결정과 그 근거를 추적합니다.
 
 ## 열려 있는 결정
 
-| # | 결정 항목 | 왜 중요한가 | 지금의 방향(제안) |
-|---|---|---|---|
-| 1 | 외부 3D/그래픽 엔진(`opale` 등) 뷰포트와 `serge` 네이티브/웹 UI의 GPU 텍스처 공유 세부 규격 | 리얼리스틱 그래픽 엔진 에디터에서 3D 뷰포트 위에 `serge` UI를 제로카피로 합성해야 함 | Native에서는 공유 GPU 디바이스 또는 네이티브 텍스처 핸들(`IOSurface`, `DXGI`, `AHardwareBuffer`, `dma-buf`)을 `ScenePrimitive::ExternalTexture`로 합성하고, Web에서는 WebGPU 캔버스 슬롯으로 마운트. **결정 시점: `opale` 설계 착수 시** (Phase 1~3 수직 슬라이스를 막지 않음) |
-| 2 | `SergeBundleManifest`·`SergeSsrHandler` 시그니처 및 옵트인 `serge-adapter-webview` 동기화 규격 | `orbic` 프로덕션 서빙 핸드오프와 네이티브 내 옵트인 웹뷰 서피스의 상태·이벤트 동기화(`seq`, 리로드 복구) 세부 고정 필요 | `hyve-serde`(`rkyv`) 기반 순서 보장 봉투(`id`, `seq`)와 버전 태그가 포함된 최소 매니페스트·트레이트로 확정. **결정 시점: Phase 2 착수 전** (Phase 1을 막지 않음) |
+현재 0건입니다.
 
 ## 결정됨
+
+- **#1 · 외부 뷰포트** (2026-11-26). 호스트가 소유한 디바이스와 프레임 타깃, CPU 픽셀 대체, 웹 캔버스의 수명·입력·색 형식을 정했습니다. [뷰포트 v1](03-adapters-and-pipeline.md#viewport-v1)
+- **#2 · 프로덕션 서빙과 옵트인 웹뷰** (2026-11-26). 정적 번들 파일 형식과 라우트 우선순위, 취소 가능한 인프로세스 SSR 시그니처, 웹뷰 이벤트의 순서·중복·리로드 복구 조건을 확정했습니다. [번들 v1](03-adapters-and-pipeline.md#bundle-v1) · [SSR v1](03-adapters-and-pipeline.md#ssr-v1) · [웹뷰 v1](03-adapters-and-pipeline.md#webview-v1)
 
 - **웹(DOM)과 네이티브(GPU+CPU 폴백) UI를 `serge` 단일 레포로 통합** (2026-11-18): `00-overview.md`
 - **UI 뷰 마크업은 `ui!` proc macro DSL 5대 최소 문법으로 고정하고, 기능·라우트·가드 조립은 `serge::feature()` Rust 체이닝으로 고정** (2026-11-18 ~ 2026-11-19): `01-dx-and-dsl.md` (`orbic::component()`·`#[component]` 심볼 충돌 해소 및 `web::*`/`native::*` 네임스페이스 확정 포함)
