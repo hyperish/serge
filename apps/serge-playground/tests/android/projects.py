@@ -34,7 +34,7 @@ def exercise(adb, server_binary, apk):
                 if item.get("package") != PKG:
                     continue
                 name = " ".join((item.get("content-desc") or item.get("text") or "").split())
-                seen.append(name)
+                seen.append((name, item.get("bounds")))
                 if label is not None and label != name:
                     continue
                 if widget is not None and item.get("class") != widget:

@@ -294,21 +294,35 @@ fn drawable_size(window: &Window) -> winit::dpi::PhysicalSize<u32> {
 }
 
 #[cfg(target_os = "android")]
-fn mobile_area(window: &Window) -> Option<serge_core::Rect> {
+fn mobile_area(host: &Window_) -> Option<serge_core::Rect> {
     use winit::platform::android::WindowExtAndroid;
-    let rect = window.content_rect();
+    let window = &host.window;
+    let mut rect = window.content_rect();
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        let size = window.inner_size();
+        rect.left = 0;
+        rect.top = 0;
+        rect.right = size.width as i32;
+        rect.bottom = size.height as i32;
+    }
+    if let Some([left, top, right, bottom]) = host.access.safe_bounds() {
+        rect.left = rect.left.max(left);
+        rect.top = rect.top.max(top);
+        rect.right = rect.right.min(right);
+        rect.bottom = rect.bottom.min(bottom);
+    }
     let scale = window.scale_factor() as f32;
-    (rect.right > rect.left && rect.bottom > rect.top).then(|| {
-        serge_core::Rect::new(
-            rect.left as f32 / scale,
-            rect.top as f32 / scale,
-            (rect.right - rect.left) as f32 / scale,
-            (rect.bottom - rect.top) as f32 / scale,
-        )
-    })
+    Some(serge_core::Rect::new(
+        rect.left as f32 / scale,
+        rect.top as f32 / scale,
+        (rect.right - rect.left).max(0) as f32 / scale,
+        (rect.bottom - rect.top).max(0) as f32 / scale,
+    ))
 }
 #[cfg(target_os = "ios")]
-use ios::content as mobile_area;
+fn mobile_area(host: &Window_) -> Option<serge_core::Rect> {
+    ios::content(&host.window)
+}
 
 struct Window_ {
     #[cfg(all(feature = "system", target_os = "linux"))]
@@ -391,7 +405,7 @@ impl<F: FnOnce() -> Element> App<F> {
         let size = drawable_size(&w.window);
         let (pw, ph) = (size.width.max(1), size.height.max(1));
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let area = mobile_area(&w.window);
+        let area = mobile_area(w);
         #[cfg(all(feature = "system", target_os = "linux"))]
         let area = w.menus.as_ref().and_then(|m| m.viewport(&w.window));
         #[cfg(not(any(
@@ -954,7 +968,7 @@ impl ApplicationHandler<Wake> for Desktop<'_> {
             .filter_map(|(_, app)| app.win.as_mut())
         {
             if w.presenter.is_some() {
-                let bounds = mobile_area(&w.window);
+                let bounds = mobile_area(w);
                 if w.content_bounds != bounds {
                     w.content_bounds = bounds;
                     w.window.request_redraw();
