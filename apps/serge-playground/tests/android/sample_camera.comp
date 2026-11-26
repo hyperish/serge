@@ -1,0 +1,9 @@
+#version 450
+layout(local_size_x=8, local_size_y=8) in;
+layout(binding=0) uniform sampler2D camera;
+layout(binding=1,std430) buffer Pixels { uint pixels[64]; };
+void main() {
+    uvec2 p = gl_GlobalInvocationID.xy;
+    vec2 uv = (vec2(p) + 0.5) / 8.0;
+    pixels[p.y * 8 + p.x] = packUnorm4x8(textureLod(camera, uv, 0.0));
+}

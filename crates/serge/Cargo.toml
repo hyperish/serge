@@ -1,20 +1,85 @@
 [package]
 name = "serge"
-description = "Unified cross-platform Web DOM and Native GPU/CPU UI framework for the Hyperish family"
+description = "Unified cross-platform Web DOM and native UI framework of the Hyperish family"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
 readme = "../../README.md"
 keywords = ["hyperish", "ui", "gui", "wasm", "cross-platform"]
 categories = ["gui", "web-programming"]
 
+[features]
+native-metal = ["serge-native-gpu/native-metal"]
+native-camera = ["native-system", "serge-native-gpu/camera", "serge-native-sys/vulkan-camera"]
+bluetooth = ["native-system", "serge-native-sys/bluetooth"]
+midi = ["native-system", "serge-native-sys/midi"]
+webview = ["serge-platform-desktop/webview", "dep:serge-adapter-webview", "serge-adapter-webview/native-host"]
+native-hotpatch = ["dep:serge-native-hotpatch", "serge-platform-desktop/hotpatch"]
+ionic = ["dep:serge-web-ionic", "serge-web-dom/ionic"]
+ipc = ["serge-adapter-client/ipc"]
+shm = ["serge-adapter-client/shm"]
+realtime = ["serge-adapter-client/realtime"]
+native-system = ["dep:serge-native-sys"]
+desktop-system = ["native-system", "serge-platform-desktop/system"]
+
 [dependencies]
-hyve = { git = "https://github.com/hyperish/hyve.git", branch = "main" }
-serge-macros = { path = "../serge-macros" }
+serge-adapter-webview = { workspace = true, optional = true }
+serge-web-ionic = { workspace = true, optional = true }
+base64.workspace = true
+hyve.workspace = true
+serge-adapter-client.workspace = true
+serge-core.workspace = true
+serge-macros.workspace = true
+serge-router.workspace = true
+serge-style.workspace = true
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+serge-native-hotpatch = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+libloading = "=0.8.9"
+futures-channel.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+serge-web-dom.workspace = true
+web-sys = { workspace = true, features = ["Window", "Storage", "Document", "Element", "console"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+serge-native-sys = { workspace = true, optional = true }
+serge-web-ssr.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+serge-native.workspace = true
+serge-native-cpu.workspace = true
+serge-native-gpu.workspace = true
+serge-platform-desktop.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-bindgen-test.workspace = true
+web-sys = { workspace = true, features = [
+    "CanvasRenderingContext2d", "Document", "Element", "Event", "EventInit", "HtmlCanvasElement",
+    "HtmlElement", "HtmlInputElement", "ImageData", "KeyboardEvent", "KeyboardEventInit",
+    "Location", "NodeList", "Window",
+] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+accesskit.workspace = true
+serge-native-cpu.workspace = true
+trybuild.workspace = true
+tokio = { workspace = true, features = ["time"] }
 
 [lints]
 workspace = true
+
+[[example]]
+name = "room_browser"
+path = "examples/room_browser.rs"
+crate-type = ["cdylib"]
+required-features = ["realtime"]

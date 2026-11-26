@@ -1,0 +1,51 @@
+[package]
+name = "serge-adapter-webview"
+description = "Local webview slots with a versioned, validated state and event bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+native-host = ["dep:gtk", "dep:wry", "dep:serge-web-ssr", "dep:serde_json", "dep:android-activity", "dep:jni", "dep:objc2", "dep:objc2-ui-kit"]
+[dependencies]
+hyve.workspace = true
+base64.workspace = true
+
+[target.'cfg(target_os="android")'.dependencies]
+android-activity = {version="=0.6.1", features=["native-activity"], optional=true}
+jni = {version="=0.22.4", optional=true}
+serge-web-ssr = {workspace=true, optional=true}
+serde_json = {workspace=true, optional=true}
+
+[target.'cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))'.dependencies]
+wry = { version = "=0.58.0", default-features = false, optional = true }
+serge-web-ssr = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[target.'cfg(target_os="ios")'.dependencies]
+objc2 = {version="=0.6.5", optional=true}
+objc2-ui-kit = {version="=0.3.2", default-features=false, features=["std","UIView","UIResponder","UIScrollView"], optional=true}
+
+[target.'cfg(target_os="linux")'.dependencies]
+wry = {version="=0.58.0", default-features=false, features=["os-webview","x11"], optional=true}
+gtk = {version="=0.19.0",optional=true}
+serge-web-ssr = {workspace=true, optional=true}
+serde_json = {workspace=true, optional=true}
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+winit.workspace = true
+
+[lints]
+workspace = true
+
+[[example]]
+name = "webview_codec"
+crate-type = ["cdylib"]

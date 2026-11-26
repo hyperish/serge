@@ -1,0 +1,36 @@
+[package]
+name = "serge-web-dom"
+description = "Web target of serge: mounts the view tree as real DOM with fine-grained updates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+ionic = ["dep:serge-web-ionic"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+serge-web-ionic = { workspace = true, optional = true }
+hyve.workspace = true
+js-sys.workspace = true
+serge-core.workspace = true
+serge-router.workspace = true
+serge-style.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+    "AddEventListenerOptions", "CanvasRenderingContext2d", "Comment", "MediaQueryList", "console", "CssStyleDeclaration", "Document",
+    "DomRect", "Element", "Event", "EventTarget", "History", "HtmlAnchorElement",
+    "HtmlButtonElement", "HtmlCanvasElement", "HtmlElement", "HtmlHeadElement",
+    "ImageData", "HtmlInputElement", "HtmlStyleElement", "KeyboardEvent", "Location", "MouseEvent", "Node",
+    "NodeList", "ResizeObserver", "ResizeObserverEntry", "Text", "Window",
+] }
+
+[lints]
+workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+web-sys = {workspace=true,features=["Performance"]}

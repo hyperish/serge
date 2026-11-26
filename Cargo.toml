@@ -1,15 +1,95 @@
 [workspace]
-members = ["crates/*", "apps/*"]
-resolver = "2"
+members = ["crates/serge-adapter-webview", "crates/serge-native-sys", "crates/serge-native-hotpatch", "crates/serge-web-ionic", "crates/serge-widget-codegen", "crates/serge-style", "crates/serge-core", "crates/serge-macros", "crates/serge", "crates/serge-native-text", "crates/serge-native-layout", "crates/serge-native", "crates/serge-native-cpu", "crates/serge-native-gpu", "crates/serge-platform-desktop", "crates/serge-router", "crates/serge-web-dom", "crates/serge-adapter-client", "apps/serge-playground", "crates/serge-web-dev", "apps/serge-cli", "crates/serge-web-ssr"]
+resolver = "3"
 
 [workspace.package]
-version = "0.0.1-alpha.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
-rust-version = "1.85"
+# The highest requirement of the pinned stack and our code: vello_cpu 0.4
+# needs 1.89, and the playground links orbic (1.94) (`hyperish/docs`
+# `05-development-rules.md` §8).
+rust-version = "1.94"
 license = "MIT"
 repository = "https://github.com/hyperish/serge"
-homepage = "https://github.com/hyperish/serge"
 authors = ["Hyperish Contributors"]
+
+[workspace.dependencies]
+serge-adapter-webview = { path = "crates/serge-adapter-webview", version = "=0.1.0-alpha.1" }
+serge-native-sys = { path = "crates/serge-native-sys", version = "=0.1.0-alpha.1" }
+serge-native-hotpatch = { path = "crates/serge-native-hotpatch", version = "=0.1.0-alpha.1" }
+serge-web-ionic = { path = "crates/serge-web-ionic", version = "=0.1.0-alpha.1" }
+serge-widget-codegen = { path = "crates/serge-widget-codegen", version = "=0.1.0-alpha.1" }
+serge = { path = "crates/serge", version = "=0.1.0-alpha.1" }
+serge-adapter-client = { path = "crates/serge-adapter-client", version = "=0.1.0-alpha.1" }
+serge-core = { path = "crates/serge-core", version = "=0.1.0-alpha.1" }
+serge-macros = { path = "crates/serge-macros", version = "=0.1.0-alpha.1" }
+serge-native = { path = "crates/serge-native", version = "=0.1.0-alpha.1" }
+serge-native-cpu = { path = "crates/serge-native-cpu", version = "=0.1.0-alpha.1" }
+serge-native-gpu = { path = "crates/serge-native-gpu", version = "=0.1.0-alpha.1" }
+serge-native-layout = { path = "crates/serge-native-layout", version = "=0.1.0-alpha.1" }
+serge-native-text = { path = "crates/serge-native-text", version = "=0.1.0-alpha.1" }
+serge-platform-desktop = { path = "crates/serge-platform-desktop", version = "=0.1.0-alpha.1" }
+serge-router = { path = "crates/serge-router", version = "=0.1.0-alpha.1" }
+serge-style = { path = "crates/serge-style", version = "=0.1.0-alpha.1" }
+serge-web-ssr = { path = "crates/serge-web-ssr", version = "=0.1.0-alpha.1" }
+serge-web-dev = { path = "crates/serge-web-dev", version = "=0.1.0-alpha.1" }
+serge-web-dom = { path = "crates/serge-web-dom", version = "=0.1.0-alpha.1" }
+
+# hyve and orbic, unpublished: sibling paths plus the exact prerelease version
+# (`hyperish/docs` `05-development-rules.md` §5).
+hyve = { path = "../hyve/crates/hyve", version = "=0.1.0-alpha.1" }
+orbic = { path = "../orbic/crates/orbic", version = "=0.1.0-alpha.1", default-features = false }
+orbic-auth = { path = "../orbic/crates/orbic-auth", version = "=0.1.0-alpha.1" }
+
+# Pinned base crates (`docs/02-architecture.md` §3, §7.8 착수 방식).
+taffy = { version = "=0.15.1", default-features = false, features = ["std", "flexbox", "block_layout"] }
+vello_cpu = { version = "=0.4.0", default-features = false }
+parley = { version = "=0.13.0" }
+# parley's font discovery; only to load fontconfig at run time on Linux
+# (no development package or pkg-config needed to build).
+fontique = { version = "=0.13.0", default-features = false }
+winit = { version = "=0.30.13" }
+softbuffer = { version = "=0.4.8" }
+# Native backends only (Metal, Vulkan, DX12); WGSL shaders.
+wgpu = { version = "=30.0.2", default-features = false, features = ["std", "wgsl", "metal", "vulkan", "dx12"] }
+
+# External dependencies (not forked).
+accesskit = "=0.25.2"
+accesskit_winit = "=0.34.2"
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "=0.4.80"
+web-sys = "=0.3.107"
+js-sys = "=0.3.107"
+wasm-bindgen-test = "=0.3.80"
+syn = { version = "2.0.119", features = ["full", "visit-mut"] }
+quote = "1.0.47"
+proc-macro2 = "1.0.107"
+tokio = { version = "1.54.1", default-features = false }
+hyper = { version = "=1.12.0", default-features = false }
+hyper-util = { version = "=0.1.21", default-features = false }
+hyper-rustls = { version = "=0.27.10", default-features = false, features = ["http1", "ring", "tls12"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "=0.7.1"
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12"] }
+rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
+http-body-util = "=0.1.5"
+http = "=1.5.0"
+bytes = "=1.12.2"
+futures-core = "=0.3.34"
+futures-util = "=0.3.34"
+futures-channel = "=0.3.34"
+tray-icon = { version = "=0.27.0", default-features = false, features = ["ksni", "muda-gtk3"] }
+url = "=2.5.9"
+wtransport = { version = "=0.7.2", default-features = false, features = ["ring"] }
+tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+tokio-util = "0.7"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+base64 = "=0.22.1"
+sha2 = "=0.11.1"
+hex = "=0.4.3"
+tempfile = "=3.27.0"
+trybuild = "1.0.119"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

@@ -1,0 +1,17 @@
+[package]
+name = "serge-native-hotpatch"
+description = "Opt-in development runtime for compiler-checked Serge render calculations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+[target.'cfg(all(target_os="macos",target_arch="aarch64"))'.dependencies]
+hyve.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+subsecond = "=0.7.10"
+[lints]
+workspace = true

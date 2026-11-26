@@ -1,0 +1,19 @@
+[package]
+name = "serge-native-layout"
+description = "Flexbox layout for serge's native targets (taffy), never in web bundles"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serge-style.workspace = true
+taffy.workspace = true
+
+[dev-dependencies]
+taffy = { workspace = true, features = ["taffy_tree"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "serge-widget-codegen"
+description = "Compile Serge's static mobile widget markup for WidgetKit and Jetpack Glance"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+syn.workspace = true
+quote.workspace = true
+proc-macro2 = { workspace = true, features = ["span-locations"] }
+
+[lints]
+workspace = true

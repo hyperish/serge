@@ -1,0 +1,4 @@
+adapter.dex includes the Android Java classes from btleplug 0.13.5, upstream commit
+1af8299c291f24fca68dfb6b7ef1b5c0475892e1. The upstream notices are in
+LICENSE-btleplug.md. BleBootstrap.java is part of Serge. rebuild.py uses the
+SHA-256-verified crates.io archive, JDK 17, Android SDK 35 and build-tools 35.0.0.

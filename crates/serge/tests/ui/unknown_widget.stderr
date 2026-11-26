@@ -1,0 +1,25 @@
+error[E0425]: cannot find type `Buton` in this scope
+ --> tests/ui/unknown_widget.rs:4:26
+  |
+4 |     let _ = ui! { Card { Buton { text: "Save" } } };
+  |                          ^^^^^ not found in this scope
+  |
+note: similarly named struct `Button` defined here
+ --> $WORKSPACE/crates/serge-core/src/widgets.rs
+  |
+  |           pub struct $name(Widget);
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+  | / widgets! {
+  | |     /// A plain container (column by default).
+  | |     View => View,
+  | |     /// A container with 8 px between children (column by default).
+... |
+  | |     Link => Link,
+  | | }
+  | |_- in this macro invocation
+  = note: this error originates in the macro `widgets` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: a struct with a similar name exists
+  |
+4 |     let _ = ui! { Card { Button { text: "Save" } } };
+  |                             +

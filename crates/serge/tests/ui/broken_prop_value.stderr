@@ -1,0 +1,5 @@
+error: expected a value for `padding`
+ --> tests/ui/broken_prop_value.rs:4:35
+  |
+4 |     let _ = ui! { Card { padding: , gap: 8px } };
+  |                                   ^

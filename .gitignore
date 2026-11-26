@@ -1,6 +1,7 @@
 /target
+playground.sqlite
+playground.sqlite-*
 **/*.rs.bk
-Cargo.lock
 .env
 .env.*
 !.env.example

@@ -1,0 +1,10 @@
+error[E0599]: no method named `txt` found for struct `serge::widgets::Button` in the current scope
+ --> tests/ui/unknown_prop.rs:4:28
+  |
+4 |     let _ = ui! { Button { txt: "Save" } };
+  |                            ^^^
+  |
+help: there is a method `text` with a similar name
+  |
+4 |     let _ = ui! { Button { text: "Save" } };
+  |                             +

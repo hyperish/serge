@@ -1,0 +1,20 @@
+[package]
+name = "serge-native-text"
+description = "Text shaping and measurement for serge's native targets (parley)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+parley.workspace = true
+serge-core.workspace = true
+serge-style.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fontique = { workspace = true, features = ["fontconfig-dlopen"] }
+
+[lints]
+workspace = true

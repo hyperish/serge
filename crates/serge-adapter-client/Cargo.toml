@@ -1,0 +1,51 @@
+[package]
+name = "serge-adapter-client"
+description = "Client side of serge: #[server] calls over HTTP (Dual-Rail, cancellation) and shared ring buffers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+ipc = ["hyve/ipc"]
+shm = ["hyve/shm"]
+realtime = ["dep:url", "dep:wtransport", "dep:tokio-tungstenite", "dep:tokio-util", "dep:futures-util", "dep:futures-channel"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "=0.6.1", features = ["native-activity"] }
+jni = "=0.22.4"
+
+[dependencies]
+futures-util = { workspace = true, optional = true, features = ["sink"] }
+futures-channel = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+hyve.workspace = true
+serge-core.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wtransport = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true, features = ["codec"] }
+bytes.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["client", "http1"] }
+hyper-util = { workspace = true, features = ["client-legacy", "http1", "tokio"] }
+hyper-rustls.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true, features = [
+    "AbortController", "AbortSignal", "Headers", "Request", "RequestCredentials", "RequestInit",
+    "Response", "Window",
+] }
+
+[lints]
+workspace = true

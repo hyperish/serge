@@ -1,0 +1,11 @@
+error: expected at least one digit in exponent
+ --> tests/ui/unknown_unit.rs:4:35
+  |
+4 |     let _ = ui! { Card { padding: 2em } };
+  |                                   ^^^
+
+error: unknown unit `em`: units are `px`, `rem` and `%`
+ --> tests/ui/unknown_unit.rs:4:35
+  |
+4 |     let _ = ui! { Card { padding: 2em } };
+  |                                   ^^^

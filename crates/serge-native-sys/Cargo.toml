@@ -1,0 +1,65 @@
+[package]
+name = "serge-native-sys"
+description = "Native clipboard, file panels, alerts and application storage for Serge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+bluetooth = ["dep:btleplug"]
+midi = ["dep:midir"]
+vulkan-camera = ["dep:ash"]
+
+[target.'cfg(any(target_os = "android", target_os = "ios", target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+btleplug = { version = "=0.13.5", optional = true }
+midir = { version = "=0.11.2", optional = true }
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+arboard = { version = "=3.7.0", default-features = false, features = ["wayland-data-control"] }
+directories = "=6.0.0"
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+rfd = { version = "=0.18.0", default-features = false }
+
+[lints]
+workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+ash = { version="=0.38.0", default-features=false, features=["std"], optional=true }
+android-activity = { version = "=0.6.1", features = ["native-activity"] }
+jni = "=0.22.4"
+ndk = { version = "=0.9.0", features = ["audio", "media", "api-level-26"] }
+ndk-sys = "=0.6.0"
+hyve.workspace = true
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+hyve.workspace = true
+keyring = {version="=3.6.3", default-features=false, features=["apple-native"]}
+security-framework = "=3.7.0"
+security-framework-sys = "=2.17.0"
+core-foundation = "=0.10.1"
+objc2 = "=0.6.5"
+block2 = "=0.6.2"
+objc2-foundation = {version="=0.3.2", default-features=false, features=["std","NSBundle","NSString","NSError","NSOperation"]}
+objc2-av-foundation = {version="=0.3.2", default-features=false, features=["std","block2","AVCaptureDevice","AVMediaFormat"]}
+objc2-avf-audio = {version="=0.3.2", default-features=false, features=["std","block2","AVAudioEngine","AVAudioNode","AVAudioIONode","AVAudioFormat","AVAudioBuffer","AVAudioTime","AVAudioTypes","AVAudioSession","AVAudioSessionTypes"]}
+serde_json.workspace = true
+objc2-core-haptics = {version="=0.3.2", default-features=false, features=["std","CHHapticDeviceCapability","CHHapticEngine","CHHapticPattern"]}
+objc2-local-authentication = {version="=0.3.2", default-features=false, features=["std","LAContext","block2"]}
+objc2-user-notifications = {version="=0.3.2", default-features=false, features=["std","block2","UNUserNotificationCenter","UNNotification","UNNotificationAction","UNNotificationCategory","UNNotificationContent","UNNotificationRequest","UNNotificationResponse","UNNotificationTrigger"]}
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2-ui-kit = {version="=0.3.2", default-features=false, features=["std","block2","objc2-core-foundation","UIResponder","UIApplication","UIScene","UISceneDefinitions","UIWindowScene","UIWindow","UIView","UITouch","UIEvent","UIControl","UIDatePicker","UIBarItem","UIBarButtonItem","UINavigationController","UINavigationItem","UINavigationBar","UIColor","UIViewController","UIAlertController","UIActivity","UIActivityViewController","UIUserActivity","UIPresentationController","UIPopoverPresentationController","UIPasteboard","UIFeedbackGenerator","UIImpactFeedbackGenerator","UIDocumentPickerViewController","objc2-uniform-type-identifiers"]}
+objc2-foundation = {version="=0.3.2", default-features=false, features=["NSArray","NSEnumerator","NSSet","NSGeometry","objc2-core-foundation","NSDate","NSDateFormatter","NSFormatter","NSLocale","NSCalendar","NSTimeZone","NSFileManager","NSPathUtilities","NSURL","NSUserActivity","NSDictionary"]}
+objc2-uniform-type-identifiers = { version="=0.3.2", default-features=false, features=["std","UTType"] }
+objc2-core-motion = {version="=0.3.2",default-features=false,features=["std","block2","CMMotionManager","CMLogItem","CMAccelerometer","CMGyro"]}
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = {version="=3.6.3", default-features=false, features=["windows-native"]}
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rfd = { version = "=0.18.0", default-features = false, features = ["xdg-portal", "wayland"] }
+keyring = {version="=3.6.3", default-features=false, features=["sync-secret-service","crypto-rust"]}

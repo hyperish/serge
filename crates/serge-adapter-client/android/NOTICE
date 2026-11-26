@@ -1,0 +1,5 @@
+platform-verifier.dex contains the published JVM component of rustls-platform-verifier
+0.2.0, Copyright (c) 2022 1Password (MIT, see LICENSE-rustls), and portions of
+Kotlin's standard library 2.2.10, Copyright JetBrains s.r.o. and Kotlin Programming
+Language contributors (Apache License 2.0, see LICENSE-kotlin). The executable is
+compiled and tree-shaken with Android R8. rebuild.py pins the sources and the SDK.

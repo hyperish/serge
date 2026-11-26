@@ -1,0 +1,28 @@
+[package]
+name = "serge-cli"
+description = "hyve-serge: the serge stages hyve runs (web bundles, dev server, native development window)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "hyve-serge"
+path = "src/main.rs"
+
+[dependencies]
+sha2.workspace = true
+hex.workspace = true
+serde_json.workspace = true
+hyve.workspace = true
+serge-widget-codegen.workspace = true
+serge-web-dev.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+serge-web-ssr.workspace = true
+
+[lints]
+workspace = true

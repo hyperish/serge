@@ -1,0 +1,4 @@
+# Browser tests: `cargo test --target wasm32-unknown-unknown -p serge --test web`
+# (headless Chrome through chromedriver; set CHROMEDRIVER if it is not on PATH).
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"

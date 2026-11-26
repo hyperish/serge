@@ -1,0 +1,5 @@
+error: `webb::class` is not a property: target attributes are `web::<name>` and `native::<name>`
+ --> tests/ui/unknown_namespace.rs:4:26
+  |
+4 |     let _ = ui! { Card { webb::class: "panel" } };
+  |                          ^^^^

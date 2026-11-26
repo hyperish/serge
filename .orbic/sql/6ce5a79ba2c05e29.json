@@ -1,0 +1,1 @@
+{"sql":"SELECT id, owner, title FROM projects WHERE owner = $1 ORDER BY id","params":[{"type":null}],"columns":[{"name":"id","type":"int","nullable":false},{"name":"owner","type":"text","nullable":false},{"name":"title","type":"text","nullable":false}],"dialects":["sqlite"]}

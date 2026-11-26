@@ -1,0 +1,16 @@
+error[E0425]: cannot find function `klass` in module `::serge::__private::web`
+ --> tests/ui/unknown_web_attr.rs:4:31
+  |
+4 |     let _ = ui! { Card { web::klass: "panel" } };
+  |                               ^^^^^ not found in `::serge::__private::web`
+  |
+note: similarly named function `class` defined here
+ --> $WORKSPACE/crates/serge-core/src/target_attrs.rs
+  |
+  |     pub fn class(v: impl IntoProp<String>) -> WebAttr {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: a function with a similar name exists
+  |
+4 -     let _ = ui! { Card { web::klass: "panel" } };
+4 +     let _ = ui! { Card { web::class: "panel" } };
+  |

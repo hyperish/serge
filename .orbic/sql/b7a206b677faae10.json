@@ -1,0 +1,1 @@
+{"sql":"INSERT INTO projects (owner, title) VALUES ($1, $2) RETURNING id, owner, title","params":[{"type":null},{"type":null}],"columns":[{"name":"id","type":"int","nullable":false},{"name":"owner","type":"text","nullable":false},{"name":"title","type":"text","nullable":false}],"dialects":["sqlite"]}
