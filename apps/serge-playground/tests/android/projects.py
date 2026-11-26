@@ -23,6 +23,11 @@ def exercise(adb, server_binary, apk):
 
     dump = f"/data/local/tmp/serge-{os.getpid()}.xml"
 
+    def center(item):
+        left, top, right, bottom = map(int, re.findall(r"-?\d+", item.get("bounds")))
+        if right > left and bottom > top:
+            return (left + right) // 2, (top + bottom) // 2
+
     def node(label=None, widget=None):
         until = time.monotonic() + 45
         seen, foreground = [], []
@@ -36,6 +41,13 @@ def exercise(adb, server_binary, apk):
             tree = ET.fromstring(device("shell", "cat", dump))
             foreground = sorted({(item.get("package", ""), item.get("text") or item.get("content-desc") or "")
                                  for item in tree.iter("node") if item.get("package") != PKG})
+            # A cold Google APIs image can cover the activity with its launcher's ANR dialog.
+            if ("android", "Pixel Launcher isn't responding") in foreground:
+                wait = tree.find(".//node[@package='android'][@text='Wait']")
+                if wait is not None and (point := center(wait)):
+                    print("Waiting for Pixel Launcher to recover on the cold emulator", flush=True)
+                    device("shell", "input", "tap", *map(str, point))
+                    continue
             seen = []
             for item in tree.iter("node"):
                 if item.get("package") != PKG:
@@ -46,9 +58,8 @@ def exercise(adb, server_binary, apk):
                     continue
                 if widget is not None and item.get("class") != widget:
                     continue
-                x, y, r, b = map(int, re.findall(r"-?\d+", item.get("bounds")))
-                if r > x and b > y:
-                    return (x + r) // 2, (y + b) // 2
+                if point := center(item):
+                    return point
         raise AssertionError(f"missing {label!r} {widget!r} in {seen}, system UI {foreground}, {report}")
 
     def tap(label=None, widget=None):
