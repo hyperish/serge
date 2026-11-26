@@ -43,7 +43,7 @@ pub fn CounterCard() -> Element {
 cargo run -p serge-playground --features server
 ```
 
-**웹 브라우저** (`hyve preview`, 명령 하나):
+**웹 브라우저** (`hyve dev`, 명령 하나):
 
 ```sh
 # 처음 한 번: hyve와 두 프레임워크의 도구 설치 (hyve·orbic이 배포되기 전이라 경로로 설치)
@@ -52,14 +52,16 @@ cargo install --locked --path ../orbic/apps/orbic-cli
 cargo install --locked --path apps/serge-cli
 
 # 웹 번들 + 데브 서버 http://127.0.0.1:8080/ 과 orbic 백엔드 http://127.0.0.1:3000/v1 을 함께 실행
-hyve preview --web
+hyve dev --web
 ```
 
-`/v1`은 백엔드로 프록시됩니다. 백엔드는 [`apps/serge-playground/Cargo.toml`](apps/serge-playground/Cargo.toml)의 `[package.metadata.orbic.server]`가 선언한 `playground-server`입니다. 소스를 저장하면 페이지는 다시 빌드되어 새로 고쳐지고, 백엔드는 다시 빌드되어 재기동됩니다. 백엔드 첫 빌드는 페이지보다 늦게 끝날 수 있어 그동안 `/v1` 호출은 `502`입니다. Ctrl-C로 모두 멈춥니다. 옵션 없이 `hyve preview`를 실행하면 같은 백엔드를 부르는 데스크톱 창도 함께 뜹니다. 레포를 갱신하면 도구도 다시 설치해야 합니다(`hyve`가 도구의 버전을 `Cargo.lock`과 맞춰 봅니다).
+`/v1`은 백엔드로 프록시됩니다. 백엔드는 [`apps/serge-playground/Cargo.toml`](apps/serge-playground/Cargo.toml)의 `[package.metadata.orbic.server]`가 선언한 `playground-server`입니다. 소스를 저장하면 페이지는 다시 빌드되어 새로 고쳐지고, 백엔드는 다시 빌드되어 재기동됩니다. 백엔드 첫 빌드는 페이지보다 늦게 끝날 수 있어 그동안 `/v1` 호출은 `502`입니다. Ctrl-C로 모두 멈춥니다. 옵션 없이 `hyve dev`를 실행하면 같은 백엔드를 부르는 데스크톱 창도 함께 뜹니다. 레포를 갱신하면 도구도 다시 설치해야 합니다(`hyve`가 도구의 버전을 `Cargo.lock`과 맞춰 봅니다).
 
-웹 빌드에는 `rustup target add wasm32-unknown-unknown`과 `Cargo.lock`의 버전과 같은 `wasm-bindgen` CLI(`cargo install wasm-bindgen-cli --version =0.2.130`)가 필요합니다. 프록시 대상은 [`hyve.toml`](hyve.toml)의 `[serge] api_proxy`이고 `--api-proxy <URL>`로 바꿀 수 있습니다. 도구를 설치하지 않고 따로 띄우려면 터미널 두 개에서 `cargo run -p serge-playground --features server --bin playground-server`와 `cargo run -p serge-cli -- preview --web`을 실행합니다. 데스크톱 앱을 따로 띄운 백엔드에 붙이려면 `SERGE_API_URL=http://127.0.0.1:3000/v1 cargo run -p serge-playground`입니다.
+웹 빌드에는 `rustup target add wasm32-unknown-unknown`과 `Cargo.lock`의 버전과 같은 `wasm-bindgen` CLI(`cargo install wasm-bindgen-cli --version =0.2.130`)가 필요합니다. 프록시 대상은 [`hyve.toml`](hyve.toml)의 `[serge] api_proxy`이고 `--api-proxy <URL>`로 바꿀 수 있습니다. 도구를 설치하지 않고 따로 띄우려면 터미널 두 개에서 `cargo run -p serge-playground --features server --bin playground-server`와 `cargo run -p serge-cli -- dev --web`을 실행합니다. 데스크톱 앱을 따로 띄운 백엔드에 붙이려면 `SERGE_API_URL=http://127.0.0.1:3000/v1 cargo run -p serge-playground`입니다.
 
 화면: 카운터, 할 일 목록(입력·체크박스·키 있는 목록), 프로젝트 편집기(로그인 가드 → 데모 로그인), 저장된 프로젝트(`#[server]` 호출·서버 검증 오류·느린 호출 취소), 실시간 텔레메트리(`SharedRingBuf` → `Canvas`).
+
+**Saved**를 열고 **Sign in**을 누르면 공용 데모 계정 `demo`의 서버 세션이 발급됩니다. 프로젝트 저장과 목록 조회는 Orbic 인증 가드를 거칩니다. 직접 실행하면 프로젝트가 `playground.sqlite`에 저장되고, `hyve dev`에서는 Orbic이 제공하는 로컬 SQLite 파일을 사용합니다.
 
 **렌더러**: 데스크톱 창은 GPU(`wgpu`)를 먼저 쓰고, GPU를 쓸 수 없으면 CPU로 그립니다. 시작할 때 어느 쪽인지 한 줄 출력합니다. `HYPERISH_RENDER_BACKEND=cpu` 또는 `gpu`로 고를 수 있습니다(`gpu`를 골랐는데 실패하면 오류).
 
@@ -70,6 +72,7 @@ hyve preview --web
 ```sh
 cargo test --workspace                                   # 네이티브 헤드리스·CPU 스냅샷·CLI·데브 서버 (CLI 테스트가 웹 번들을 빌드하므로 위의 wasm 타깃과 wasm-bindgen CLI 필요)
 cargo test -p serge-playground --features server         # 실제 orbic 서버와 원격·인프로세스 호출
+CHROMEDRIVER=/path/to/chromedriver cargo test -p serge-playground --features server --test backend web_ui_saves_projects_through_the_backend -- --ignored --exact   # Chrome으로 저장 후 SQLite 파일을 다시 열어 검증 (Python 3 필요)
 CHROMEDRIVER=<chromedriver 경로> cargo test --target wasm32-unknown-unknown -p serge --test web   # 헤드리스 Chrome의 DOM
 ```
 
@@ -80,8 +83,8 @@ CHROMEDRIVER=<chromedriver 경로> cargo test --target wasm32-unknown-unknown -p
 | 번호 | 문서 | 내용 |
 |---|---|---|
 | 00 | [개요와 범위](docs/00-overview.md) | `serge`의 정체성(웹 DOM + 네이티브 GPU/CPU 통합), 레퍼런스, 네이티브 WebView 금지 및 `orbic`과의 역할 경계 |
-| 01 | [DX 및 DSL 설계](docs/01-dx-and-dsl.md) | 단일 공통 proc macro UI DSL(QML/Slint + Dioxus `rsx!`), 컴포넌트 체이닝 조립, 로컬 프리뷰 DX |
+| 01 | [DX 및 DSL 설계](docs/01-dx-and-dsl.md) | 단일 공통 proc macro UI DSL(QML/Slint + Dioxus `rsx!`), 컴포넌트 체이닝 조립, 로컬 개발 환경 |
 | 02 | [아키텍처와 크레이트 구조](docs/02-architecture.md) | `apps/`, `crates/` 모노레포 구성, 공통 UI 코어와 Web(`serge-web-*`) / Native(`serge-native-*`) 크레이트 분담 |
 | 03 | [파이프라인과 호환 어댑터](docs/03-adapters-and-pipeline.md) | Leptos형 DOM 파이프라인, GPUI/Rune형 GPU+CPU 폴백 파이프라인, `orbic` 프로덕션 서빙 핸드오프 및 옵트인 웹뷰 어댑터 |
-| 04 | [열린 결정](docs/04-open-questions.md) | `serge` 레포의 미정 사항 목록과 결정 기록 |
+| 04 | [결정 기록](docs/04-open-questions.md) | `serge` 레포의 열린 항목과 확정된 계약 |
 | 05 | [구현 계획](docs/05-implementation-plan.md) | Phase 1 작업 순서와 완료 기준 |
