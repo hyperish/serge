@@ -1,4 +1,8 @@
-# `hyve-serge preview --web` proxies this prefix to the playground backend
+# `hyve-serge dev --web` proxies this prefix to the playground backend
 # (`cargo run -p serge-playground --features server --bin playground-server`).
 [serge]
 api_proxy = "http://127.0.0.1:3000/v1"
+
+[orbic]
+dialect = "sqlite"
+database_url = "sqlite:playground.sqlite?mode=rwc"

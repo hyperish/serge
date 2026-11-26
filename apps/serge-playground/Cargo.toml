@@ -12,9 +12,15 @@ publish = false
 default-run = "serge-playground"
 
 [features]
+webview = ["serge/webview"]
+ipc = ["server", "orbic/ipc", "serge/ipc"]
+realtime = ["server", "orbic/realtime", "serge/realtime"]
+desktop-system = ["serge/desktop-system"]
+web-host = ["server","orbic/serge"]
+cache-redis = ["server", "orbic/cache-redis"]
 ## The app's `server` feature: keeps `#[server]` bodies and adds the orbic
 ## backend (the server binary, and the single-binary desktop build).
-server = ["dep:orbic", "orbic/server", "dep:tokio"]
+server = ["dep:orbic", "orbic/server", "dep:orbic-auth", "dep:tokio"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -27,6 +33,7 @@ required-features = ["server"]
 [dependencies]
 hyve.workspace = true
 orbic = { workspace = true, optional = true }
+orbic-auth = { workspace = true, optional = true }
 serge.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -35,20 +42,31 @@ wasm-bindgen.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, optional = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 
+[target.'cfg(any(target_os="macos",target_os="linux",target_os="windows",target_os="ios"))'.dev-dependencies]
+serge-web-ssr.workspace = true
+serde_json.workspace = true
+
 [dev-dependencies]
 hyve = { workspace = true, features = ["test"] }
 
 # The TLS front of `tests/tls.rs`.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+wtransport = { workspace = true, features = ["self-signed"] }
+tempfile.workspace = true
+serge-web-dev.workspace = true
 rcgen.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
 tokio = { workspace = true, features = ["io-util", "net", "rt", "time"] }
 
 [package.metadata.serge]
+widgets = ["src/platform_widgets.rs"]
+android_package = "org.hyperish.playground"
 web = true
+export = "serge-playground"
+ssg = ["/"]
 
-# `hyve preview` runs this server next to the page and restarts it when
+# `hyve dev` runs this server next to the page and restarts it when
 # its sources change (orbic `docs/01-dx-and-dsl.md` §3).
 [package.metadata.orbic.server]
 bin = "playground-server"
@@ -56,3 +74,66 @@ features = ["server"]
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os="macos")'.dev-dependencies]
+objc2 = "=0.6.5"
+objc2-app-kit = {version="=0.3.2", default-features=false, features=["NSApplication","NSResponder","NSWindow","NSDockTile","NSMenu","NSMenuItem"]}
+
+[target.'cfg(target_os="linux")'.dev-dependencies]
+zbus = "=5.19.0"
+
+[target.'cfg(target_os="windows")'.dev-dependencies]
+raw-window-handle = "=0.6.2"
+windows = { version = "=0.62.2", features = ["Win32_Foundation","Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os="ios")'.dev-dependencies]
+serge = {workspace=true,features=["native-system"]}
+
+[[test]]
+name = "system_menu"
+path = "tests/system_menu.rs"
+harness = false
+required-features = ["desktop-system"]
+
+[[test]]
+name = "windows"
+path = "tests/windows.rs"
+harness = false
+
+[[test]]
+name = "window_placement"
+path = "tests/window_placement.rs"
+harness = false
+
+[package.metadata.android]
+package = "org.hyperish.playground"
+build_targets = ["aarch64-linux-android"]
+manifest_overlay = "android/AndroidManifest.xml"
+window_layout = true
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Serge Playground"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[[test]]
+name = "system_x11"
+path = "tests/system_x11.rs"
+harness = false
+required-features = ["desktop-system"]
+
+[[test]]
+name = "status_notifier"
+harness = false
+required-features = ["desktop-system"]
+
+[[test]]
+name = "webview"
+path = "tests/webview.rs"
+harness = false
+required-features = ["webview"]

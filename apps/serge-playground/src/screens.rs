@@ -7,6 +7,7 @@ use std::time::Duration;
 use hyve::prelude::*;
 use serge::prelude::*;
 
+use crate::PlaygroundSession;
 use crate::server::{
     CreateProject, Project, ReportRequest, build_report, create_project_rpc, list_projects,
 };
@@ -30,8 +31,10 @@ pub fn NavLink(to: String, label: String) -> Element {
 }
 
 #[component]
-pub fn Shell(auth: Ctx<AuthState>, children: Element) -> Element {
+pub fn Shell(auth: Ctx<AuthState>, session: Ctx<PlaygroundSession>, children: Element) -> Element {
     let auth = *auth;
+    let status = signal(String::new());
+    let signing_out = signal(false);
     ui! {
         View { padding: 20px, gap: 16px,
             Stack { layout: h_stack, gap: 16px, align: Align::Center,
@@ -44,11 +47,22 @@ pub fn Shell(auth: Ctx<AuthState>, children: Element) -> Element {
                 NavLink { to: "/telemetry", label: "Telemetry" }
                 View { grow: 1.0 }
                 if auth.is_signed_in() {
-                    Button { text: "Sign out", clicked => { auth.set(false); navigate("/"); } }
+                    Button {
+                        text: "Sign out", disabled: signing_out(),
+                        clicked => async move {
+                            signing_out.set(true);
+                            match session.sign_out().await {
+                                Ok(()) => { status.set(String::new()); auth.set(false); navigate("/"); }
+                                Err(e) => status.set(format!("Could not sign out: {}", e.message())),
+                            }
+                            signing_out.set(false);
+                        }
+                    }
                 } else {
                     NavLink { to: "/login", label: "Sign in" }
                 }
             }
+            if !status().is_empty() { Text { "{status()}" } }
             {children}
         }
     }
@@ -271,6 +285,7 @@ pub fn SavedProjects(store: Ctx<ProjectDraftStore>) -> Element {
     let projects = signal(Vec::<Project>::new());
     let status = signal(String::from("Loading…"));
     let report = signal(String::new());
+    let loading = signal(true);
     let busy = signal(false);
 
     spawn(async move {
@@ -285,12 +300,17 @@ pub fn SavedProjects(store: Ctx<ProjectDraftStore>) -> Element {
             }
             Err(e) => status.set(format!("Could not load: {} ({})", e.message(), e.code())),
         }
+        loading.set(false);
     });
     let save = move || {
+        if loading.get_untracked() || busy.get_untracked() {
+            return;
+        }
+        busy.set(true);
+        let submitted = title.get_untracked();
         spawn(async move {
-            busy.set(true);
             let r = create_project_rpc(CreateProject {
-                title: title.get_untracked(),
+                title: submitted.clone(),
             })
             .await;
             busy.set(false);
@@ -298,7 +318,9 @@ pub fn SavedProjects(store: Ctx<ProjectDraftStore>) -> Element {
                 Ok(p) => {
                     status.set(format!("Saved #{} on the server.", p.id));
                     projects.update(|v| v.push(p));
-                    title.set(String::new());
+                    if title.get_untracked() == submitted {
+                        title.set(String::new());
+                    }
                 }
                 Err(e) => status.set(format!(
                     "The server refused: {} ({})",
@@ -321,7 +343,7 @@ pub fn SavedProjects(store: Ctx<ProjectDraftStore>) -> Element {
                     changed(t) => { title.set(t); },
                     submitted => { save(); }
                 }
-                Button { text: if busy() { "Saving…" } else { "Save" }, disabled: busy(), clicked => { save(); } }
+                Button { text: if busy() { "Saving…" } else { "Save" }, disabled: loading() || busy(), clicked => { save(); } }
             }
             if !status().is_empty() {
                 Text { "{status()}" }
@@ -472,13 +494,25 @@ pub fn TelemetryScreen() -> Element {
 // ---------------------------------------------------------------------------
 
 #[component]
-pub fn Login(auth: Ctx<AuthState>) -> Element {
+pub fn Login(auth: Ctx<AuthState>, session: Ctx<PlaygroundSession>) -> Element {
     let auth = *auth;
+    let status = signal(String::new());
+    let busy = signal(false);
     ui! {
         Card { gap: 10px,
             Text { font_size: 18px, font_weight: 700, "Sign in" }
-            Text { color: MUTED, "The project screens are guarded with RequireAuth. This demo sign-in only flips the UI's AuthState." }
-            Button { text: "Sign in", clicked => { auth.set(true); navigate("/projects"); } }
+            Text { color: MUTED, "Sign in to the shared playground demo account to save projects." }
+            Button {
+                text: "Sign in", disabled: busy(),
+                clicked => async move {
+                    busy.set(true);
+                    match session.sign_in().await {
+                        Ok(()) => { auth.set(true); navigate("/projects"); }
+                        Err(e) => { busy.set(false); status.set(format!("Could not sign in: {}", e.message())); }
+                    }
+                }
+            }
+            if !status().is_empty() { Text { "{status()}" } }
         }
     }
 }

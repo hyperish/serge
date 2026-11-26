@@ -12,8 +12,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use hyve::api::{Rail, Transport, provide_transport};
-use hyve::prelude::*;
+mod common;
+use common::{database_backend, in_process, run, scope_with, signed_in};
+use hyve::api::Rail;
 use rcgen::{BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair, KeyUsagePurpose};
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use serge::RemoteTransport;
@@ -47,7 +48,7 @@ fn serve_tls(ca: &Ca, name: &str) -> (String, Arc<AtomicUsize>) {
         .unwrap();
     let backend_addr = backend_listener.local_addr().unwrap();
     rt.spawn(orbic::serve(
-        backend(),
+        database_backend().1,
         backend_listener,
         std::future::pending(),
     ));
@@ -92,26 +93,11 @@ fn serve_tls(ca: &Ca, name: &str) -> (String, Arc<AtomicUsize>) {
     (format!("https://{addr}/v1"), through)
 }
 
-fn scope_with(t: Arc<dyn Transport>) -> Scope {
-    let s = Scope::root();
-    provide_transport(&s, t);
-    s
-}
-
-fn run<F: std::future::IntoFuture>(scope: &Scope, f: impl FnOnce() -> F) -> F::Output {
-    let call = scope.enter(|| f().into_future());
-    serge::runtime().block_on(scope.scoped(call))
-}
-
-fn in_process() -> Arc<dyn Transport> {
-    Arc::new(orbic::InProcess::new(backend().build().unwrap()))
-}
-
 #[test]
 fn pinned_roots_carry_calls_over_tls() {
     let ca = ca();
     let (base, through) = serve_tls(&ca, "127.0.0.1");
-    let local = scope_with(in_process());
+    let local = signed_in(in_process());
     for remote in [
         RemoteTransport::new(&base).root_certificates(&ca.pem),
         RemoteTransport::new(&base)
@@ -122,7 +108,7 @@ fn pinned_roots_carry_calls_over_tls() {
             .root_certificates(&ca.pem)
             .claim_fingerprint(0xdead_beef),
     ] {
-        let r = scope_with(remote.into_arc());
+        let r = signed_in(PlaygroundSession::remote(remote));
         let a = run(&r, || {
             create_project_rpc(CreateProject {
                 title: "over tls".into(),

@@ -8,53 +8,37 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use hyve::api::{Rail, Transport, provide_transport};
-use hyve::prelude::*;
+mod common;
+use common::{database_backend, in_process, run, scope_with, signed_in};
+use hyve::api::Rail;
+use orbic::{Db, OrbicApp};
 use serge::RemoteTransport;
-use serge::testing::Headless;
+use serge::testing::{CpuRenderer, Headless};
 use serge_playground::*;
 
 /// Starts the backend on an ephemeral loopback port; returns its `/v1` URL.
-fn serve() -> String {
+fn serve(app: OrbicApp) -> String {
     let rt = serge::runtime();
     let listener = rt
         .block_on(tokio::net::TcpListener::bind("127.0.0.1:0"))
         .unwrap();
     let addr = listener.local_addr().unwrap();
-    rt.spawn(orbic::serve(backend(), listener, std::future::pending()));
+    rt.spawn(orbic::serve(app, listener, std::future::pending()));
     format!("http://{addr}/v1")
-}
-
-fn in_process() -> Arc<dyn Transport> {
-    Arc::new(orbic::InProcess::new(backend().build().unwrap()))
-}
-
-fn scope_with(t: Arc<dyn Transport>) -> Scope {
-    let s = Scope::root();
-    provide_transport(&s, t);
-    s
-}
-
-/// Makes the call inside `scope` (calls find their transport when made) and
-/// waits for it.
-fn run<F: std::future::IntoFuture>(scope: &Scope, f: impl FnOnce() -> F) -> F::Output {
-    let call = scope.enter(|| f().into_future());
-    serge::runtime().block_on(scope.scoped(call))
 }
 
 #[test]
 fn remote_calls_match_in_process_calls() {
-    let base = serve();
+    let base = serve(database_backend().1);
     for remote in [
-        RemoteTransport::new(&base).into_arc(),
-        RemoteTransport::new(&base).rail(Rail::Standard).into_arc(),
+        RemoteTransport::new(&base),
+        RemoteTransport::new(&base).rail(Rail::Standard),
         // A stale schema: the server answers 415 and the call is retried
         // once on the standard rail.
-        RemoteTransport::new(&base)
-            .claim_fingerprint(0xdead_beef)
-            .into_arc(),
+        RemoteTransport::new(&base).claim_fingerprint(0xdead_beef),
     ] {
-        let (r, l) = (scope_with(remote), scope_with(in_process()));
+        let r = signed_in(PlaygroundSession::remote(remote));
+        let l = signed_in(in_process());
         let a = run(&r, || {
             create_project_rpc(CreateProject {
                 title: "alpha".into(),
@@ -90,7 +74,7 @@ fn remote_calls_match_in_process_calls() {
 
 #[test]
 fn remote_calls_are_cancelled_with_their_scope() {
-    let base = serve();
+    let base = serve(database_backend().1);
     let scope = scope_with(RemoteTransport::new(&base).into_arc());
     let s2 = scope.clone();
     serge::runtime().spawn(async move {
@@ -109,7 +93,19 @@ fn remote_calls_are_cancelled_with_their_scope() {
 
 #[test]
 fn the_app_saves_projects_through_the_backend() {
-    let app = app(in_process()).assemble().unwrap();
+    let (db, backend) = database_backend();
+    let session = PlaygroundSession::in_process(backend.build().unwrap());
+    let caller = scope_with(Arc::new(session.clone()));
+    let refused = run(&caller, || {
+        create_project_rpc(CreateProject {
+            title: "Guest project".into(),
+        })
+    })
+    .unwrap_err();
+    assert_eq!(refused.code(), "unauthenticated");
+    assert!(stored(&db).is_empty());
+
+    let app = app(session).assemble().unwrap();
     let h = Headless::with_scope(app.scope.clone(), 900.0, 700.0, move || app.element());
     assert!(h.shows("serge playground"), "{:?}", h.texts());
 
@@ -119,7 +115,7 @@ fn the_app_saves_projects_through_the_backend() {
         h.wait_until(Duration::from_secs(1), |h| h
             .texts()
             .iter()
-            .any(|t| t.contains("guarded with RequireAuth"))),
+            .any(|t| t.contains("shared playground demo account"))),
         "{:?}",
         h.texts()
     );
@@ -151,8 +147,22 @@ fn the_app_saves_projects_through_the_backend() {
         h.texts()
     );
     assert!(h.shows("Saved #1 on the server."), "{:?}", h.texts());
+    assert_stored(&db, "First project");
 
-    // The server's validation error is shown.
+    // A fresh screen reads SQLite again; the previous screen's signal is gone.
+    h.click_text("Home");
+    h.click_text("Saved");
+    assert!(h.wait_until(Duration::from_secs(2), |h| h.shows("#1  First project")));
+    let rect = h.rect_of("#1  First project").unwrap();
+    let frame = CpuRenderer::new().render(&h.settle(), 900, 700, 1.0);
+    let background = frame.pixel(rect.x as u16, rect.y as u16);
+    assert!(
+        (rect.y as u16..rect.bottom() as u16)
+            .any(|y| (rect.x as u16..rect.right() as u16).any(|x| frame.pixel(x, y) != background)),
+        "the CPU renderer must draw the stored project label"
+    );
+
+    // An empty title is rejected and the stored row is unchanged.
     h.click_text("Save");
     assert!(
         h.wait_until(Duration::from_secs(2), |h| h
@@ -162,6 +172,69 @@ fn the_app_saves_projects_through_the_backend() {
         "{:?}",
         h.texts()
     );
+    assert_stored(&db, "First project");
+    h.click_text("Sign out");
+    assert!(h.wait_until(Duration::from_secs(2), |h| h.shows("Sign in")));
+    assert_eq!(
+        run(&caller, list_projects).unwrap_err().code(),
+        "unauthenticated"
+    );
+}
+
+fn stored(db: &Db) -> Vec<StoredProject> {
+    serge::runtime()
+        .block_on(db.query::<StoredProject>().fetch_all())
+        .unwrap()
+}
+
+fn assert_stored(db: &Db, title: &str) {
+    let rows = stored(db);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        (rows[0].id, rows[0].owner.as_str(), rows[0].title.as_str()),
+        (1, "demo", title)
+    );
+}
+
+/// Exercises the shipped WASM app and its same-origin API proxy. The browser
+/// CI job runs this test explicitly with a matching ChromeDriver.
+#[test]
+#[ignore = "requires Chrome, chromedriver, wasm32-unknown-unknown and the wasm-bindgen CLI"]
+fn web_ui_saves_projects_through_the_backend() {
+    use serge_web_dev::{BuildOptions, DevServer, Proxy, Workspace, build_web};
+    use std::{path::Path, process::Command};
+
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ws = Workspace::load(dir).unwrap();
+    let package = ws.web_app(Some("serge-playground")).unwrap();
+    let files = ws
+        .target_dir
+        .join(format!("playground-browser-{}", hyve::Ulid::new()));
+    let options = BuildOptions {
+        out_dir: Some(files.join("web")),
+        ..Default::default()
+    };
+    let bundle = build_web(&ws, package, &options).unwrap();
+    let url = format!(
+        "sqlite:{}?mode=rwc",
+        files.join("projects.sqlite").display()
+    );
+    let rt = serge::runtime();
+    let db = rt.block_on(Db::connect(&url)).unwrap();
+    let app = rt.block_on(backend(db.clone())).unwrap();
+    let proxy = Proxy::from_url(&serve(app));
+    let web = DevServer::start("127.0.0.1:0", bundle.dir, Some(proxy)).unwrap();
+    let status = Command::new("python3")
+        .arg(dir.join("tests/browser/projects.py"))
+        .arg(format!("http://{}/", web.addr()))
+        .status()
+        .expect("start the browser test");
+    assert!(status.success(), "browser test exited with {status}");
+    rt.block_on(db.close());
+    let reopened = rt.block_on(Db::connect(&url)).unwrap();
+    assert_stored(&reopened, "Browser project");
+    rt.block_on(reopened.close());
+    std::fs::remove_dir_all(files).unwrap();
 }
 
 #[test]
@@ -195,7 +268,9 @@ fn telemetry_streams_into_the_canvas() {
 #[test]
 fn every_screen_renders() {
     use serge::testing::{CpuRenderer, Parity, gpu_test_renderer, write_ppm};
-    let app = app(in_process()).assemble().unwrap();
+    let session = in_process();
+    signed_in(session.clone());
+    let app = app(session).assemble().unwrap();
     app.scope.get::<serge::AuthState>().unwrap().set(true);
     let h = Headless::with_scope(app.scope.clone(), 900.0, 640.0, move || app.element());
     let mut r = CpuRenderer::new();

@@ -1,0 +1,6 @@
+<devices>
+    <device name="Serge SDK MIDI Echo" manufacturer="Serge" product="SDK probe">
+        <input-port name="Serge test input" />
+        <output-port name="Serge test output" />
+    </device>
+</devices>

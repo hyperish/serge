@@ -1,4 +1,6 @@
 /target
+playground.sqlite
+playground.sqlite-*
 **/*.rs.bk
 .env
 .env.*

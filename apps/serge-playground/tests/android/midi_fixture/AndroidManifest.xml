@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.hyperish.midifixture">
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35" />
+    <uses-feature android:name="android.software.midi" android:required="true" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <instrumentation android:name=".PenFixture" android:targetPackage="org.hyperish.midifixture" />
+    <application android:label="Serge MIDI acceptance">
+        <activity android:name=".GattFixture" android:exported="true" />
+        <service android:name=".Echo" android:exported="true" android:permission="android.permission.BIND_MIDI_DEVICE_SERVICE">
+            <intent-filter><action android:name="android.media.midi.MidiDeviceService" /></intent-filter>
+            <meta-data android:name="android.media.midi.MidiDeviceService" android:resource="@xml/device" />
+        </service>
+    </application>
+</manifest>
