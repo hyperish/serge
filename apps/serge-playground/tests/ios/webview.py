@@ -118,7 +118,9 @@ def verify(codec):
                 link = "serge-slot://projects/42?mode=edit"
                 sim("openurl", udid, link)
                 delivered = receipt.with_suffix(".url")
-                until = time.monotonic() + 10
+                # The first link needs SpringBoard confirmation before UIKit
+                # can resume the app and deliver the URL to its delegate.
+                until = time.monotonic() + 45
                 while time.monotonic() < until:
                     if delivered.exists() and delivered.read_text() == link:
                         break
@@ -129,7 +131,7 @@ def verify(codec):
                         print(stderr.read_text(errors="replace")[-4000:], flush=True)
                     predicate = 'process IN {"SpringBoard","lsd","ios-slot","frontboardd"} AND ' \
                                 '(eventMessage CONTAINS[c] "openURL" OR eventMessage CONTAINS[c] "serge-slot" OR eventMessage CONTAINS[c] "open application")'
-                    events = sim("spawn", udid, "log", "show", "--last", "20s", "--style", "compact",
+                    events = sim("spawn", udid, "log", "show", "--last", "1m", "--style", "compact",
                                  "--info", "--predicate", predicate)
                     print(events[-5000:], flush=True)
                     if artifacts := os.environ.get("SERGE_SIM_DIAGNOSTICS"):
