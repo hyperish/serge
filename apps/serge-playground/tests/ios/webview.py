@@ -26,7 +26,9 @@ def confirming_links(root, udid):
     runner = None
     with subprocess.Popen(args, cwd=project) as driver:
         try:
-            until = time.monotonic() + 150
+            # XCTest builds, signs, installs and starts the runner on a fresh
+            # simulator before its first test can signal readiness.
+            until = time.monotonic() + 600
             while time.monotonic() < until and driver.poll() is None:
                 if runner is None:
                     result = subprocess.run(["xcrun", "simctl", "get_app_container", udid,
@@ -35,23 +37,20 @@ def confirming_links(root, udid):
                         runner = Path(result.stdout.strip()) / "tmp"
                 if runner is not None and (runner / "links-ready").is_file():
                     break
-                time.sleep(.4)
+                time.sleep(1)
             else:
-                raise RuntimeError("the SpringBoard UI test did not start")
+                raise RuntimeError(f"the link UI test did not start (xcodebuild status {driver.poll()})")
             yield runner
+            (runner / "links-finished").touch()
+            if driver.wait(timeout=180):
+                raise RuntimeError(f"the link UI test exited {driver.returncode}")
         finally:
             if driver.poll() is None:
-                if runner is not None:
-                    (runner / "links-finished").touch()
-                else:
-                    driver.terminate()
+                driver.terminate()
                 try:
-                    driver.wait(timeout=45)
+                    driver.wait(timeout=20)
                 except subprocess.TimeoutExpired:
-                    driver.terminate()
-                    raise
-        if driver.returncode:
-            raise RuntimeError(f"the SpringBoard UI test exited {driver.returncode}")
+                    driver.kill()
 
 
 def prepare(directory, cli):
