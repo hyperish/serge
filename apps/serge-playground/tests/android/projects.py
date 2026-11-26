@@ -76,7 +76,10 @@ def exercise(adb, server_binary, apk):
             time.sleep(.2)
         else:
             raise AssertionError("Android did not show the keyboard for the focused project title")
-        device("shell", "input", "text", title)
+        # Android timestamps every key in one "input text" argument at once.
+        # Give each keystroke its own event time while the emulator draws.
+        for character in title:
+            device("shell", "input", "text", character)
         node(title, "android.widget.EditText")
 
     def start(db, port=0):
@@ -138,7 +141,7 @@ def exercise(adb, server_binary, apk):
             if isinstance(error, subprocess.CalledProcessError) and error.output:
                 print(error.output.decode(errors="replace"), file=sys.stderr)
             for args in [("shell", "dumpsys", "activity", "exit-info", PKG),
-                         ("logcat", "-d", "-s", "RustStdoutStderr", "AndroidRuntime", "libc", "DEBUG")]:
+                         ("logcat", "-d", "-s", "RustStdoutStderr", "AndroidRuntime", "InputDispatcher", "libc", "DEBUG")]:
                 log = subprocess.run([*adb, *args], capture_output=True, text=True, errors="replace")
                 print("\n".join(log.stdout.splitlines()[-80:]), file=sys.stderr)
             raise
