@@ -218,6 +218,8 @@ ACK·결과가 유실되면 같은 세대에서 같은 순번·내용으로 재�
 
 ### 모바일 기기 입력과 창
 
+Android API 30 이상에서는 시스템 표시줄, 화면 컷아웃, 화면 키보드가 차지하는 영역을 `WindowInsets`에서 읽어 네이티브 콘텐츠 좌표로 변환합니다. 같은 영역이 렌더링, 터치, 접근성에 적용됩니다. Pixel 6 인수 테스트는 상단의 카운터 링크를 터치한 뒤 프로젝트 저장과 재조회를 검사합니다. [Android 창 처리](../crates/serge-platform-desktop/src/android_access.rs) · [터치 인수 테스트](../apps/serge-playground/tests/android/projects.py)
+
 Android 앱의 `AndroidSystem::window_posture`는 Jetpack에서 받은 창 기준 접힘 영역, 차폐 및 분리 상태를 제공합니다. 일반 화면은 빈 목록을 반환합니다. `SensorKind::HingeAngle`은 센서가 있는 기기에서 각도를 도 단위로 제공합니다. `AndroidSystem::enter_picture_in_picture`는 매니페스트에 PiP 지원을 선언한 Activity를 UI 스레드에서 전환합니다. [플레이그라운드 매니페스트](../apps/serge-playground/android/AndroidManifest.xml) · [에뮬레이터 인수](../apps/serge-playground/tests/android/sdk.py)
 
 Android `hw::CameraTexture`는 호출자의 EGL 컨텍스트에서 Camera2의 외부 OES 텍스처, 타임스탬프와 UV 변환을 제공합니다. Vulkan 1.1에서는 `hw::CameraBufferReader`가 받은 이미지의 AHardwareBuffer를 `hw::vulkan_camera::VulkanCameraImage`로 가져옵니다. 장치에서 외부 버퍼·외부 큐 패밀리·YCbCr 변환을 켜고 acquire와 release를 기록한 뒤 마지막 GPU 사용이 끝날 때까지 이미지를 유지합니다. Apple `MetalCamera`는 Core Video 버퍼를 wgpu 텍스처로 가져오며, GPU가 사용을 마칠 때까지 IOSurface를 유지합니다. Apple 마이크는 앱의 `NSMicrophoneUsageDescription`과 OS 승인을 확인합니다. iOS 앱은 입력을 허용하는 오디오 세션을 설정한 뒤 `hw::Microphone::open`으로 단일 채널 PCM 링을 엽니다. [Metal 카메라](../crates/serge-native-gpu/src/camera.rs) · [AVAudioEngine 입력 노드](https://developer.apple.com/documentation/avfaudio/avaudioengine/inputnode) · [Android 기기 입력](../crates/serge-native-sys/src/android/)
