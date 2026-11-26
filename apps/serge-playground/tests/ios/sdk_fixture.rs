@@ -138,7 +138,9 @@ fn probe(mode: String, host: &IosSystem) -> io::Result<Tick> {
             let request = if mode != "export" {
                 host.pick_document("public.plain-text")?
             } else {
-                let path = std::env::temp_dir().join("serge-export.txt");
+                let outgoing = std::env::temp_dir().join("outgoing");
+                fs::create_dir_all(&outgoing)?;
+                let path = outgoing.join("serge-export.txt");
                 fs::write(&path, "Serge document bytes")?;
                 host.export_document(&path)?
             };

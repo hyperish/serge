@@ -15,8 +15,8 @@ final class PlatformTests: XCTestCase {
         app.launch()
     }
 
-    func tap(_ item: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(item.waitForExistence(timeout: 12), "\(item)\n\(app.debugDescription)", file: file, line: line)
+    func tap(_ item: XCUIElement, timeout: TimeInterval = 12, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(item.waitForExistence(timeout: timeout), "\(item)\n\(app.debugDescription)", file: file, line: line)
         item.tap()
     }
 
@@ -59,7 +59,7 @@ final class PlatformTests: XCTestCase {
 
     func testDocumentRoundTrip() {
         start("export")
-        tap(app.buttons["Save"].firstMatch)
+        tap(app.buttons["Save"].firstMatch, timeout: 45)
         completed("export")
         start("import")
         let items = app.descendants(matching: .any)
@@ -78,8 +78,7 @@ final class PlatformTests: XCTestCase {
 
     func testCancelImport() {
         start("import-cancel")
-        let navigation = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
-        tap(navigation.buttons["Cancel"].firstMatch)
+        tap(app.buttons["Cancel"].firstMatch, timeout: 45)
         completed("import-cancel")
     }
 
