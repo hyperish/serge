@@ -364,9 +364,45 @@ jobs:
           cargo build --locked -p serge-cli
           export PATH="$PWD/target/debug:$PATH"
           python3 apps/serge-playground/tests/ios/webview.py "$RUNNER_TEMP/webview"
+
+  ios-sdk:
+    name: iOS system UI, WidgetKit and Shortcuts
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: serge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            serge
+            hyve
+      - name: Prepare the iPhone simulator tooling and build both CLIs
+        run: |
+          command -v xcodegen || brew install xcodegen
+          command -v applesimutils || brew install wix/brew/applesimutils
+          case "$(uname -m)" in
+            arm64) rustup target add aarch64-apple-ios-sim ;;
+            x86_64) rustup target add x86_64-apple-ios ;;
+          esac
+          cargo build --locked --manifest-path ../hyve/Cargo.toml -p hyve-cli
+          cargo build --locked -p serge-cli
       - name: Exercise UIKit sheets, WidgetKit storage and ActivityKit in a private simulator
         run: |
-          command -v applesimutils || brew install wix/brew/applesimutils
           export PATH="$PWD/target/debug:$PATH"
           python3 -Bu apps/serge-playground/tests/ios/sdk.py
 
