@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main, "feat/**"]
   pull_request:
@@ -12,10 +13,8 @@ env:
   MSRV: "1.94"
   # Must match `wasm-bindgen` in Cargo.lock.
   WASM_BINDGEN_VERSION: "0.2.130"
-  # hyve and orbic are not published yet: the workspace depends on `../hyve`
-  # and `../orbic` with exact versions (hyperish/docs 05-development-rules.md
-  # §5), so CI checks them out next to serge. Switch to the registry once
-  # their `0.1.0-alpha.N` prereleases are published.
+  # Check the three development workspaces together, including adapter changes
+  # made since the last published prereleases.
   HYVE_REF: feat/phase1
   ORBIC_REF: feat/phase1
 
@@ -50,16 +49,24 @@ jobs:
       # The CPU snapshot tests need a system font; the GPU parity tests run
       # on Mesa's software Vulkan (lavapipe); the CLI test bundles the
       # playground for the web.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build the generated Glance Android library
+        env:
+          SERGE_ANDROID_GRADLE: gradle
+        run: cargo test -p serge-cli --test widgets --locked
       - name: Install a font, software Vulkan and the wasm-bindgen CLI
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq --no-install-recommends fonts-dejavu-core mesa-vulkan-drivers
+          sudo apt-get install -yq --no-install-recommends fonts-dejavu-core mesa-vulkan-drivers libgtk-3-dev libwebkit2gtk-4.1-dev libxdo-dev libdbus-1-dev libasound2-dev xvfb xauth xclip xdotool x11-utils gnome-keyring dbus-x11 xdg-desktop-portal-gtk zenity weston xwayland
           cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
         run: |
           cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo clippy -p serge-native-sys --all-features --all-targets --locked -- -D warnings
           cargo clippy -p serge-playground --features server --all-targets --locked -- -D warnings
           cargo clippy -p serge -p serge-web-dom -p serge-adapter-client -p serge-playground --target wasm32-unknown-unknown --all-targets --locked -- -D warnings
       # GPU checks fail instead of skipping when no adapter is found.
@@ -71,9 +78,29 @@ jobs:
       # server on loopback, the app end to end in process, every screen on
       # the GPU and the CPU.
       - name: Test with the server feature
-        run: cargo test -p serge-playground --features server --locked
+        run: cargo test -p serge-playground --features ipc --locked
         env:
           HYPERISH_TEST_GPU: require
+      - name: Exercise native menus, dialogs, clipboard and shortcuts on X11
+        run: |
+          export XDG_DATA_HOME="$RUNNER_TEMP/serge-data" XDG_CURRENT_DESKTOP=GNOME
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          export SERGE_TEST_X11=1 SERGE_TEST_SECRET_SERVICE=1 HYPERISH_RENDER_BACKEND=cpu
+          xvfb-run -a dbus-run-session -- sh -ec 'printf "%s" fixture | gnome-keyring-daemon --unlock --components=secrets >/dev/null; cargo test --locked -p serge-playground --features desktop-system --test system_x11'
+      - name: Run both webview rails on WebKitGTK
+        env:
+          GDK_BACKEND: x11
+          SERGE_TEST_WEBVIEW: "1"
+          HYPERISH_RENDER_BACKEND: cpu
+        run: |
+          cargo build --locked -p serge-adapter-webview --example webview_codec --target wasm32-unknown-unknown
+          wasm-bindgen --target web --out-dir "$RUNNER_TEMP/webview" target/wasm32-unknown-unknown/debug/examples/webview_codec.wasm
+          dbus-run-session -- xvfb-run -a cargo test --locked -p serge-playground --features webview --test webview
+          SERGE_TEST_WEBVIEW_WASM="$RUNNER_TEMP/webview" dbus-run-session -- xvfb-run -a cargo test --locked -p serge-playground --features webview --test webview
+      - name: Open Wayland windows and use native menus and webviews in Weston
+        run: xvfb-run -a dbus-run-session -- python3 apps/serge-playground/tests/linux/wayland.py "$RUNNER_TEMP/webview"
+      - name: Recover room state across WebTransport and WebSocket
+        run: cargo test --locked -p serge-playground --features realtime --test realtime
       # Every public crate packages and builds from its package alone
       # (docs/05-implementation-plan.md §3, CI). A hyve version that is not
       # on crates.io yet comes from the sibling checkout, as a patch
@@ -115,8 +142,93 @@ jobs:
       - name: Install the wasm-bindgen test runner
         run: cargo install wasm-bindgen-cli --version ${{ env.WASM_BINDGEN_VERSION }} --locked
       # The runner image ships Chrome with a matching chromedriver.
-      - name: Run the DOM tests
-        run: CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" cargo test --target wasm32-unknown-unknown -p serge --test web --locked
+      - name: Run the DOM and WebGPU tests
+        env:
+          SERGE_REQUIRE_WEBGPU: "1"
+          WASM_BINDGEN_TEST_WEBDRIVER_JSON: ${{ github.workspace }}/serge/apps/serge-playground/tests/browser/webdriver-webgpu.json
+        run: |
+          export CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver"
+          cargo test --target wasm32-unknown-unknown -p serge-web-dom --lib --locked
+          cargo test --target wasm32-unknown-unknown -p serge --features ionic --test web --locked
+      - name: Restore UI state on native and browser rebuilds
+        run: |
+          cargo build --locked -p serge-cli
+          CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" python3 apps/serge-cli/tests/reload.py "$PWD/target/debug/hyve-serge"
+      - name: Verify production bundle and guard in Chrome
+        run: CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" python3 apps/serge-playground/tests/browser/production.py
+      - name: Verify WebTransport and both WebSocket rails in Chrome
+        run: CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" python3 apps/serge-playground/tests/browser/realtime.py
+      - name: Save a playground project from Chrome through the server guard to SQLite
+        run: CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver" cargo test -p serge-playground --features server --test backend web_ui_saves_projects_through_the_backend --locked -- --ignored --exact
+
+  android:
+    name: Android NativeActivity against a real backend
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        profile: [pixel_6, pixel_fold]
+    defaults:
+      run:
+        working-directory: serge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android, wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Prepare KVM and the Android toolchain
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sdkmanager 'ndk;27.2.12479018' 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          cargo install cargo-apk --version 0.10.0 --locked
+      - name: Build the server and the debug APK
+        run: |
+          cargo build --manifest-path ../hyve/Cargo.toml --locked -p hyve-cli
+          echo "HYVE=$GITHUB_WORKSPACE/hyve/target/debug/hyve" >> "$GITHUB_ENV"
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+          cargo build -p serge-adapter-webview --locked --target wasm32-unknown-unknown --example webview_codec
+          wasm-bindgen --target web --out-dir "$RUNNER_TEMP/slot-codec" target/wasm32-unknown-unknown/debug/examples/webview_codec.wasm
+          echo "SERGE_TEST_WEBVIEW_WASM=$RUNNER_TEMP/slot-codec" >> "$GITHUB_ENV"
+          cargo build --locked -p serge-playground --features server --bin playground-server
+          cargo apk build --lib -p serge-playground --target x86_64-linux-android
+          cargo run --locked -p serge-cli -- widgets -p serge-playground
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          emulator-port: 5554
+          working-directory: serge
+          script: |
+            python3 apps/serge-playground/tests/android/projects.py emulator-5554 target/debug/playground-server target/debug/apk/serge-playground.apk
+            python3 apps/serge-playground/tests/android/sdk.py emulator-5554
+            python3 apps/serge-playground/tests/android/widgets.py emulator-5554 target/serge-widgets/serge-playground
+
 
   msrv:
     name: Build on the declared minimum Rust version
@@ -177,7 +289,112 @@ jobs:
         with:
           workspaces: serge
       # Metal: the GPU parity tests must find an adapter.
+      - name: Open, present and close two native windows independently
+        env:
+          SERGE_TEST_WINDOWS: "1"
+        run: cargo test -p serge-playground --test windows --test window_placement --locked
+      - name: Synchronize a WKWebView over JSON and the archive codec
+        env:
+          SERGE_TEST_WEBVIEW: "1"
+          HYPERISH_RENDER_BACKEND: cpu
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+          cargo build --locked -p serge-adapter-webview --example webview_codec --target wasm32-unknown-unknown
+          wasm-bindgen --target web --out-dir "$RUNNER_TEMP/webview" target/wasm32-unknown-unknown/debug/examples/webview_codec.wasm
+          cargo test --locked -p serge-playground --features webview --test webview
+          SERGE_TEST_WEBVIEW_WASM="$RUNNER_TEMP/webview" cargo test --locked -p serge-playground --features webview --test webview
+      - name: Keep the native window alive across a checked render edit
+        if: runner.arch == 'ARM64'
+        run: |
+          curl -fsSL --retry 3 https://github.com/DioxusLabs/dioxus/releases/download/v0.7.10/dx-aarch64-apple-darwin.tar.gz -o "$RUNNER_TEMP/dx.tar.gz"
+          echo "342c92bc33dca60dadd725ed5e249923f049ae2e1e50b7477f4968d56695b425  $RUNNER_TEMP/dx.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/dx.tar.gz" -C "$RUNNER_TEMP"
+          cargo build --locked -p serge-cli
+          HYVE_DX="$RUNNER_TEMP/dx" python3 apps/serge-cli/tests/hotpatch.py target/debug/hyve-serge
+      - name: Type-check generated Live Activities with WidgetKit
+        env:
+          SERGE_REQUIRE_IOS_WIDGET_SDK: "1"
+        run: cargo test -p serge-cli --test widgets --locked
+      - name: Open the AppKit popover and deliver menu and status-item actions
+        env:
+          SERGE_TEST_WINDOWS: "1"
+          HYPERISH_RENDER_BACKEND: cpu
+        run: |
+          swiftc apps/serge-playground/tests/macos/status_click.swift -o "$RUNNER_TEMP/serge-status-click"
+          SERGE_TEST_STATUSBAR_CLICK="$RUNNER_TEMP/serge-status-click" cargo test --locked -p serge-playground --features desktop-system --test system_menu
       - name: Native tests
         run: cargo test -p serge -p serge-native -p serge-native-text -p serge-native-layout -p serge-native-cpu -p serge-native-gpu -p serge-platform-desktop --locked
         env:
           HYPERISH_TEST_GPU: require
+      - name: Read an IOSurface with Metal and exchange notes through CoreMIDI
+        run: |
+          cargo test --locked -p serge-native-gpu --features camera --lib metal_reads_the_iosurface
+          HYPERISH_TEST_GPU=require cargo test --locked -p serge-native-gpu --features native-metal --lib --test parity --test viewports
+          cargo test --locked -p serge-native-sys --features midi --test midi
+          cargo test --locked -p serge-native-sys --lib native_pcm_buffers
+      - name: Check the iOS system services and UIKit bindings
+        run: |
+          rustup target add aarch64-apple-ios-sim
+          cargo clippy --locked -p serge-native-sys -p serge-adapter-webview --target aarch64-apple-ios-sim --all-features --all-targets -- -D warnings
+      - name: Run both WKWebView rails in a private iPhone simulator
+        run: |
+          command -v xcodegen || brew install xcodegen
+          case "$(uname -m)" in
+            arm64) rustup target add aarch64-apple-ios-sim ;;
+            x86_64) rustup target add x86_64-apple-ios ;;
+          esac
+          cargo build --locked --manifest-path ../hyve/Cargo.toml -p hyve-cli
+          cargo build --locked -p serge-cli
+          export PATH="$PWD/target/debug:$PATH"
+          python3 apps/serge-playground/tests/ios/webview.py "$RUNNER_TEMP/webview"
+      - name: Exercise UIKit sheets, WidgetKit storage and ActivityKit in a private simulator
+        run: |
+          command -v applesimutils || brew install wix/brew/applesimutils
+          export PATH="$PWD/target/debug:$PATH"
+          python3 -Bu apps/serge-playground/tests/ios/sdk.py
+
+  windows:
+    name: Windows native IPC, windows and WebView2
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: serge
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: ${{ env.HYVE_REF }}
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: ${{ env.ORBIC_REF }}
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: serge
+      - name: Dispatch generated project calls over a named pipe
+        run: cargo test --locked -p serge-playground --features ipc --test local_rpc
+      - name: Restore a moved floating window after restarting the app
+        env:
+          SERGE_TEST_WINDOWS: "1"
+          HYPERISH_RENDER_BACKEND: cpu
+        run: cargo test --locked -p serge-playground --features desktop-system --test window_placement --test system_menu
+      - name: Run JSON and archive scenarios in WebView2
+        env:
+          SERGE_TEST_WEBVIEW: "1"
+          HYPERISH_RENDER_BACKEND: cpu
+        run: |
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+          cargo build --locked -p serge-adapter-webview --example webview_codec --target wasm32-unknown-unknown
+          wasm-bindgen --target web --out-dir "$RUNNER_TEMP/webview" target/wasm32-unknown-unknown/debug/examples/webview_codec.wasm
+          cargo test --locked -p serge-playground --features webview --test webview
+          SERGE_TEST_WEBVIEW_WASM="$(cygpath -w "$RUNNER_TEMP/webview")" cargo test --locked -p serge-playground --features webview --test webview

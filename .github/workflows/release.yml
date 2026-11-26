@@ -25,57 +25,72 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
   publish:
     name: Publish to crates.io
+    needs: verify
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: serge
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          path: serge
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/hyve
+          ref: feat/phase1
+          path: hyve
+      - uses: actions/checkout@v4
+        with:
+          repository: hyperish/orbic
+          ref: feat/phase1
+          path: orbic
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-
-      - name: Resolve target package and verify tag version
+        with:
+          workspaces: serge
+      - name: Verify release scope and versions
         id: target
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            PKG="${{ inputs.package }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-            if [[ "$TAG" == *-v* ]]; then
-              PKG="${TAG%-v*}"
-              TAG_VER="${TAG##*-v}"
-            else
-              PKG="serge"
-              TAG_VER="${TAG#v}"
-            fi
-            CRATE_VER=$(cargo metadata --no-deps --format-version 1 | python3 -c "import json,sys; pkgs=json.load(sys.stdin)['packages']; print(next(p['version'] for p in pkgs if p['name']=='${PKG}'))")
-            if [[ "${TAG_VER}" != "${CRATE_VER}" ]]; then
-              echo "::error::Tag version (${TAG_VER}) does not match ${PKG} Cargo.toml version (${CRATE_VER})."
-              exit 1
-            fi
-          fi
-          echo "package=${PKG}" >> "$GITHUB_OUTPUT"
-          echo "Publishing package: ${PKG}"
-
-      - name: Verify formatting, lints, and tests
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo test --workspace
-
-      - name: Publish crate
+        shell: python
         env:
+          REQUESTED_PACKAGE: ${{ inputs.package }}
+        run: |
+          import json, os, subprocess
+          metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"]))
+          public = {p["name"]: p["version"] for p in metadata["packages"]
+                    if p["id"] in metadata["workspace_members"] and
+                    (p["publish"] is None or "crates-io" in p["publish"])}
+          if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
+              name = os.environ["REQUESTED_PACKAGE"] or "serge"
+              version = None
+          else:
+              tag = os.environ["GITHUB_REF_NAME"]
+              name, sep, version = tag.rpartition("-v")
+              if not sep:
+                  if not tag.startswith("v"):
+                      raise SystemExit("expected a version tag")
+                  name, version = "", tag[1:]
+          if name and name not in public:
+              raise SystemExit(f"unknown or private crate {name!r}")
+          selected = {name: public[name]} if name else public
+          if version is not None:
+              for crate, actual in selected.items():
+                  if actual != version:
+                      raise SystemExit(f"{crate} is {actual}, tag requested {version}")
+          print("Selected crates:", ", ".join(sorted(selected)))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"package={name}", file=output)
+      - name: Publish selected crates in dependency order
+        shell: bash
+        env:
+          PACKAGE: ${{ steps.target.outputs.package }}
+          DRY_RUN: ${{ inputs.dry_run }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          PKG="${{ steps.target.outputs.package }}"
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            cargo publish -p "${PKG}" --dry-run
-          else
-            if [[ -z "${CARGO_REGISTRY_TOKEN}" ]]; then
-              echo "::error::CARGO_REGISTRY_TOKEN secret is not configured."
-              exit 1
-            fi
-            cargo publish -p "${PKG}"
-          fi
+          args=(--workspace)
+          if [[ -n "$PACKAGE" ]]; then args=(-p "$PACKAGE"); fi
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          cargo publish --locked "${args[@]}"
