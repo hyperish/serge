@@ -4,23 +4,27 @@
 //! ```text
 //! hyve-serge stages
 //! hyve-serge build [--debug] [-p <package>] [--features <a,b>] [--out <dir>]
-//! hyve-serge preview [--web | --native] [-p <package>] [--port <n>]
-//!                    [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]
-//! hyve-serge preview --native [-p <package>] [--features <a,b>] [--release]
+//! hyve-serge dev [--web | --native] [-p <package>] [--port <n>]
+//!                [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]
+//! hyve-serge dev --native [-p <package>] [--features <a,b>] [--release]
 //! hyve-serge --version | --help
 //! ```
 //!
 //! `stages` answers `hyve` (first line: serge's version, then one stage per
-//! line; `preview` only when the workspace has an app). `build` bundles every web app (`[package.metadata.serge] web =
+//! line; `dev` only when the workspace has an app). `build` bundles every web app (`[package.metadata.serge] web =
 //! true`) for the browser into `target/serge/<package>/`, release unless
-//! `--debug`. `preview --web` builds the app, serves it with SPA fallback,
+//! `--debug`. `dev --web` builds the app, serves it with SPA fallback,
 //! proxies the API prefix to an orbic server (`--api-proxy
 //! http://127.0.0.1:3000/v1`, or `api_proxy` in `hyve.toml`'s `[serge]`
 //! table: the URL's path is the proxied prefix), and rebuilds and reloads
-//! the page when sources change. `preview --native` builds the app's binary
-//! and runs it in a window; `preview` without either runs both. Under `hyve
-//! preview` (`HYVE_STAGE_LIFELINE=stdin`) the preview stops, window
-//! included, when stdin closes. Exit codes: 0 success, 1 failure, 2 usage.
+//! the page when sources change. `dev --native` builds the app's binary
+//! and runs it in a window. With no target flag, `dev` runs both. Under
+//! `hyve dev` (`HYVE_STAGE_LIFELINE=stdin`) closing stdin stops the
+//! development session and its window. Exit codes: 0 success, 1 failure, 2 usage.
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod hotpatch;
+mod widgets;
 
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode, Stdio};
@@ -32,8 +36,9 @@ use serge_web_dev::{BuildOptions, DevServer, Error, Proxy, Workspace};
 const USAGE: &str = "usage:
   hyve-serge stages
   hyve-serge --version | --help
+  hyve-serge widgets -p <package>
   hyve-serge build [--debug] [-p <package>] [--features <a,b>] [--out <dir>]
-  hyve-serge preview [--web | --native] [-p <package>] [--port <n>] [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]";
+  hyve-serge dev [--web | --native] [-p <package>] [--port <n>] [--api-proxy <url>] [--features <a,b>] [--no-watch] [--release]";
 
 enum Fail {
     Usage(String),
@@ -107,15 +112,17 @@ fn main() -> ExitCode {
         Some((s, rest)) if s == "stages" && rest.is_empty() => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             println!("build");
-            // `hyve preview` ends when any stage ends, so `preview` is
-            // offered only when there is an app to preview.
+            println!("widgets");
+            // `hyve dev` ends when any stage ends, so `dev` is
+            // offered only when there is an app to run.
             if workspace().is_ok_and(|ws| ws.packages.iter().any(|p| p.web)) {
-                println!("preview");
+                println!("dev");
             }
             Ok(())
         }
         Some((s, rest)) if s == "build" => build(rest),
-        Some((s, rest)) if s == "preview" => preview(rest),
+        Some((s, rest)) if s == "dev" => dev(rest),
+        Some((s, rest)) if s == "widgets" => widget_sources(rest),
         Some((s, rest)) if (s == "--help" || s == "-h") && rest.is_empty() => {
             println!("{USAGE}");
             Ok(())
@@ -150,6 +157,26 @@ fn workspace() -> Result<Workspace, Fail> {
     Ok(Workspace::load(&dir)?)
 }
 
+fn widget_sources(args: &[String]) -> Result<(), Fail> {
+    let opts = parse("widgets", args, &["-p", "--package"])?;
+    let name = opts
+        .package
+        .ok_or_else(|| Fail::Usage("widgets requires -p <package>".into()))?;
+    let ws = workspace()?;
+    let app = ws.web_app(Some(&name))?;
+    let generation = widgets::generate(app, &ws.target_dir).map_err(|message| {
+        Fail::Error(Error {
+            message,
+            hint: None,
+        })
+    })?;
+    println!(
+        "{}",
+        serde_json::to_string(&generation).map_err(|e| Fail::Usage(e.to_string()))?
+    );
+    Ok(())
+}
+
 fn build(args: &[String]) -> Result<(), Fail> {
     let o = parse(
         "build",
@@ -157,29 +184,35 @@ fn build(args: &[String]) -> Result<(), Fail> {
         &["--web", "--debug", "-p", "--package", "--features", "--out"],
     )?;
     let ws = workspace()?;
-    let apps: Vec<_> = match &o.package {
-        Some(p) => vec![ws.web_app(Some(p))?.clone()],
-        None => ws.packages.iter().filter(|p| p.web).cloned().collect(),
+    let packages: Vec<_> = if let Some(name) = &o.package {
+        vec![ws.web_app(Some(name))?]
+    } else {
+        ws.packages.iter().collect()
     };
-    if apps.is_empty() {
-        eprintln!("hyve-serge: no web apps to bundle (`[package.metadata.serge] web = true`)");
-        return Ok(());
+    for p in &packages {
+        widgets::generate(p, &ws.target_dir).map_err(|message| {
+            Fail::Error(Error {
+                message,
+                hint: None,
+            })
+        })?;
     }
+    let apps = packages.into_iter().filter(|p| p.web);
     for app in apps {
         let opts = BuildOptions {
             release: !o.debug,
             features: o.features.clone(),
             out_dir: o.out.clone(),
         };
-        let b = serge_web_dev::build_web(&ws, &app, &opts)?;
+        let b = serge_web_dev::build_production(&ws, app, &opts)?;
         eprintln!("hyve-serge: {} → {}", app.name, b.dir.display());
     }
     Ok(())
 }
 
-fn preview(args: &[String]) -> Result<(), Fail> {
+fn dev(args: &[String]) -> Result<(), Fail> {
     let o = parse(
-        "preview",
+        "dev",
         args,
         &[
             "--web",
@@ -200,32 +233,40 @@ fn preview(args: &[String]) -> Result<(), Fail> {
         (false, true) => {
             let window = Window::default();
             window.lifeline();
-            window.start(native_app(&o)?).map_err(|e| {
-                Fail::Error(Error {
-                    message: format!("the app could not start: {e}"),
-                    hint: None,
-                })
-            })?;
-            match window.wait() {
-                Some(status) if !status.success() => Err(Fail::Error(Error {
-                    message: format!("the app exited with {status}"),
-                    hint: None,
-                })),
-                _ => Ok(()),
-            }
+            dev_native(&o, &window)
         }
-        (true, false) => preview_web(&o, None),
+        (true, false) => dev_web(&o, None),
         // Neither: every target of the app — the window next to the page.
-        (false, false) => preview_web(&o, Some(())),
+        (false, false) => dev_web(&o, Some(())),
     }
 }
 
-/// The native window this tool started, if any. Under `hyve preview`
+/// The native window this tool started, if any. Under `hyve dev`
 /// (`HYVE_STAGE_LIFELINE=stdin`) it is stopped, and the tool exits, when
 /// stdin closes (`hyve/docs/01-dx-and-dsl.md` §2). Starting and stopping
 /// hold the same lock, so a window never starts after the stop.
 #[derive(Clone, Default)]
-struct Window(Arc<Mutex<(Option<Child>, bool)>>);
+struct Window(Arc<Mutex<WindowState>>);
+
+#[derive(Default)]
+struct WindowState {
+    child: Option<Child>,
+    checkpoints: Option<tempfile::TempDir>,
+    closed: bool,
+}
+
+impl WindowState {
+    fn checkpoints(&mut self) -> std::io::Result<&std::path::Path> {
+        if self.checkpoints.is_none() {
+            self.checkpoints = Some(tempfile::Builder::new().prefix("serge-state-").tempdir()?);
+        }
+        Ok(self
+            .checkpoints
+            .as_ref()
+            .expect("created state directory")
+            .path())
+    }
+}
 
 impl Window {
     fn lifeline(&self) {
@@ -239,36 +280,87 @@ impl Window {
             let mut stdin = std::io::stdin();
             while matches!(stdin.read(&mut sink), Ok(n) if n > 0) {}
             let mut w = window.0.lock().unwrap_or_else(|e| e.into_inner());
-            w.1 = true;
-            if let Some(mut c) = w.0.take() {
+            w.closed = true;
+            if let Some(mut c) = w.child.take() {
                 let _ = c.kill();
                 let _ = c.wait();
             }
+            drop(w.checkpoints.take());
             std::process::exit(0);
         });
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    fn session_dir(&self) -> std::io::Result<PathBuf> {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        Ok(state.checkpoints()?.to_owned())
     }
 
     /// Starts the window unless the tool is stopping.
     fn start(&self, mut cmd: Command) -> std::io::Result<()> {
         let mut w = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        if !w.1 {
-            w.0 = Some(cmd.spawn()?);
+        if w.closed {
+            return Ok(());
+        }
+        cmd.env("HYPERISH_SERGE_DEV_STATE", w.checkpoints()?);
+        let next = cmd.spawn()?;
+        if let Some(mut old) = w.child.replace(next) {
+            let _ = old.kill();
+            let _ = old.wait();
         }
         Ok(())
     }
 
-    /// Waits for the window to close.
-    fn wait(&self) -> Option<std::process::ExitStatus> {
-        loop {
-            {
-                let mut w = self.0.lock().unwrap_or_else(|e| e.into_inner());
-                match w.0.as_mut().map(Child::try_wait) {
-                    Some(Ok(Some(status))) => return Some(status),
-                    Some(Ok(None)) => {}
-                    Some(Err(_)) | None => return None,
-                }
-            }
-            std::thread::sleep(Duration::from_millis(100));
+    fn status(&self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        let mut state = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        match state.child.as_mut() {
+            Some(child) => child.try_wait(),
+            None => Ok(None),
+        }
+    }
+}
+
+fn dev_error(e: impl std::fmt::Display) -> Fail {
+    Fail::Error(Error {
+        message: e.to_string(),
+        hint: None,
+    })
+}
+
+fn dev_native(opts: &Opts, window: &Window) -> Result<(), Fail> {
+    let ws = workspace()?;
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    if !opts.release && !opts.no_watch && hotpatch::enabled(&ws)? {
+        return hotpatch::serve(&ws, opts, window);
+    }
+    dev_native_restart(&ws, opts, window)
+}
+
+fn dev_native_restart(ws: &Workspace, opts: &Opts, window: &Window) -> Result<(), Fail> {
+    let dirs = ws.watch_dirs();
+    let mut stamp = sources_stamp(&dirs);
+    window.start(native_app(opts)?).map_err(dev_error)?;
+    loop {
+        if let Some(status) = window.status().map_err(dev_error)? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(dev_error(format!("the app exited with {status}")))
+            };
+        }
+        std::thread::sleep(Duration::from_millis(250));
+        if opts.no_watch {
+            continue;
+        }
+        let next = sources_stamp(&dirs);
+        if next == stamp {
+            continue;
+        }
+        stamp = next;
+        match native_app(opts) {
+            Ok(cmd) => window.start(cmd).map_err(dev_error)?,
+            Err(Fail::Error(err)) => eprintln!("hyve-serge: keeping the running window: {err}"),
+            Err(error) => return Err(error),
         }
     }
 }
@@ -353,18 +445,29 @@ fn sources_stamp(dirs: &[PathBuf]) -> (Option<SystemTime>, usize) {
     (newest, n)
 }
 
-fn preview_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
+fn dev_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
     let window = Window::default();
     window.lifeline();
     let ws = workspace()?;
     let app = ws.web_app(o.package.as_deref())?.clone();
-    let opts = BuildOptions {
-        release: o.release,
-        features: o.features.clone(),
-        out_dir: None,
+    let build = || -> Result<tempfile::TempDir, Fail> {
+        let dir = tempfile::Builder::new()
+            .prefix("serge-web-")
+            .tempdir()
+            .map_err(dev_error)?;
+        serge_web_dev::build_web(
+            &ws,
+            &app,
+            &BuildOptions {
+                release: o.release,
+                features: o.features.clone(),
+                out_dir: Some(dir.path().into()),
+            },
+        )?;
+        Ok(dir)
     };
     let started = Instant::now();
-    let bundle = serge_web_dev::build_web(&ws, &app, &opts)?;
+    let bundle = build()?;
     eprintln!(
         "hyve-serge: built {} in {:.1}s",
         app.name,
@@ -377,21 +480,15 @@ fn preview_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
         .or_else(|| ws.configured_api_proxy())
         .map(|u| Proxy::from_url(&u));
     let port = o.port.unwrap_or(8080);
-    let server = (0..20)
-        .find_map(|i| {
-            DevServer::start(
-                &format!("127.0.0.1:{}", port + i),
-                bundle.dir.clone(),
-                proxy.clone(),
-            )
-            .ok()
-        })
-        .ok_or_else(|| {
-            Fail::Error(Error {
-                message: format!("no free port from {port}"),
-                hint: Some("pass `--port <n>`".into()),
-            })
-        })?;
+    let listener = (0..20)
+        .filter_map(|i| port.checked_add(i))
+        .find_map(|port| std::net::TcpListener::bind(("127.0.0.1", port)).ok())
+        .ok_or_else(|| dev_error(format!("no free port from {port}")))?;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut namespace = DefaultHasher::new();
+    (&ws.root, &app.name).hash(&mut namespace);
+    let server = DevServer::development(listener, bundle, proxy.clone(), namespace.finish())
+        .map_err(dev_error)?;
     eprintln!(
         "hyve-serge: serving {} at http://{}/",
         app.name,
@@ -405,25 +502,16 @@ fn preview_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
     if native.is_some() {
         eprintln!("hyve-serge: building the native window next to the page");
         let (o, window) = (o.clone(), window.clone());
-        std::thread::spawn(move || {
-            match native_app(&o).and_then(|cmd| {
-                window.start(cmd).map_err(|e| {
-                    Fail::Error(Error {
-                        message: format!("{e}"),
-                        hint: None,
-                    })
-                })
-            }) {
-                Ok(()) => {}
-                Err(Fail::Error(e)) => {
-                    eprintln!(
-                        "hyve-serge: the native window could not start: {}",
-                        e.message
-                    )
-                }
-                Err(Fail::Usage(e)) => {
-                    eprintln!("hyve-serge: the native window could not start: {e}")
-                }
+        std::thread::spawn(move || match dev_native(&o, &window) {
+            Ok(()) => {}
+            Err(Fail::Error(e)) => {
+                eprintln!(
+                    "hyve-serge: the native window could not start: {}",
+                    e.message
+                )
+            }
+            Err(Fail::Usage(e)) => {
+                eprintln!("hyve-serge: the native window could not start: {e}")
             }
         });
     }
@@ -448,16 +536,19 @@ fn preview_web(o: &Opts, native: Option<()>) -> Result<(), Fail> {
         std::thread::sleep(Duration::from_millis(150));
         stamp = sources_stamp(&dirs);
         let t = Instant::now();
-        match serge_web_dev::build_web(&ws, &app, &opts) {
-            Ok(_) => {
+        match build() {
+            Ok(next) => {
                 eprintln!(
                     "hyve-serge: rebuilt in {:.1}s, reloading {} page(s)",
                     t.elapsed().as_secs_f32(),
                     server.reload().listeners()
                 );
-                server.reload().reload();
+                server.replace(next);
             }
-            Err(e) => eprintln!("hyve-serge: rebuild failed (the page keeps the last build): {e}"),
+            Err(Fail::Error(e)) => {
+                eprintln!("hyve-serge: rebuild failed (the page keeps the last build): {e}")
+            }
+            Err(e) => return Err(e),
         }
     }
 }

@@ -18,7 +18,10 @@ fn stages_answer_hyve() {
     assert!(out.status.success());
     let text = String::from_utf8(out.stdout).unwrap();
     let lines: Vec<_> = text.lines().collect();
-    assert_eq!(lines, [env!("CARGO_PKG_VERSION"), "build", "preview"]);
+    assert_eq!(
+        lines,
+        [env!("CARGO_PKG_VERSION"), "build", "widgets", "dev"]
+    );
     for flag in ["--version", "-V"] {
         let out = hyve_serge(&[flag]);
         assert!(out.status.success(), "{flag}");
@@ -41,7 +44,7 @@ fn usage_errors_exit_2() {
         &["deploy"],
         &["--version", "x"],
         &["build", "--port", "1"],
-        &["preview", "--web", "--native"],
+        &["dev", "--web", "--native"],
     ] {
         let out = hyve_serge(args);
         assert_eq!(out.status.code(), Some(2), "{args:?}");
@@ -77,7 +80,17 @@ fn builds_the_playground_for_the_browser() {
     let wasm = std::fs::read(out_dir.join("app_bg.wasm")).unwrap();
     assert_eq!(&wasm[..4], b"\0asm");
     let html = std::fs::read_to_string(out_dir.join("index.html")).unwrap();
-    assert!(html.contains("serge-root") && html.contains("/app.js"));
+    assert!(html.contains("serge-root") && html.contains("/assets/"));
+    let checked = serge_web_ssr::VerifiedBundle::open(&out_dir, &["/v1"]).unwrap();
+    assert!(
+        checked
+            .manifest
+            .routes
+            .iter()
+            .any(|r| r.pattern() == "/projects")
+    );
+    assert!(html.contains("data-serge-prerendered"));
+
     // No `/favicon.ico` request (a 404 in the console) unless the app adds one.
     assert!(
         html.contains(r#"<link rel="icon" href="data:,">"#),
@@ -86,22 +99,22 @@ fn builds_the_playground_for_the_browser() {
     // A client build: no server bodies or database code in the module.
     let text = String::from_utf8_lossy(&wasm);
     assert!(
-        !text.contains("ProjectStore"),
-        "the server-only store leaked into the web build"
+        !text.contains("INSERT INTO projects"),
+        "the server-only project insert leaked into the web build"
     );
     let _ = std::fs::remove_dir_all(out_dir);
 }
 
-/// Under `hyve preview` (`HYVE_STAGE_LIFELINE=stdin`) the preview stops when
+/// Under `hyve dev` (`HYVE_STAGE_LIFELINE=stdin`) the development session stops when
 /// its stdin closes, and its port is free again.
 #[test]
-fn preview_stops_when_hyve_closes_its_stdin() {
+fn dev_stops_when_hyve_closes_its_stdin() {
     use std::io::{BufRead, BufReader};
     use std::process::Stdio;
     use std::time::{Duration, Instant};
     let port = 18_000 + (std::process::id() % 1_000) as u16 * 20;
     let mut child = Command::new(env!("CARGO_BIN_EXE_hyve-serge"))
-        .args(["preview", "--web", "--no-watch", "-p", "serge-playground"])
+        .args(["dev", "--web", "--no-watch", "-p", "serge-playground"])
         .args(["--port", &port.to_string()])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("HYVE_STAGE_LIFELINE", "stdin")
@@ -139,7 +152,10 @@ fn preview_stops_when_hyve_closes_its_stdin() {
         if let Some(s) = child.try_wait().unwrap() {
             break s;
         }
-        assert!(Instant::now() < deadline, "the preview did not stop");
+        assert!(
+            Instant::now() < deadline,
+            "the development session did not stop"
+        );
         std::thread::sleep(Duration::from_millis(50));
     };
     let said = reader.join().unwrap();
@@ -150,9 +166,9 @@ fn preview_stops_when_hyve_closes_its_stdin() {
     );
 }
 
-/// `preview` is offered only where there is an app to preview.
+/// `dev` is offered only where there is an app to run.
 #[test]
-fn preview_is_offered_only_with_an_app() {
+fn dev_is_offered_only_with_an_app() {
     let dir = std::env::temp_dir().join(format!("serge-cli-noapp-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
@@ -171,7 +187,7 @@ fn preview_is_offered_only_with_an_app() {
     let text = String::from_utf8(out.stdout).unwrap();
     assert_eq!(
         text.lines().collect::<Vec<_>>(),
-        [env!("CARGO_PKG_VERSION"), "build"]
+        [env!("CARGO_PKG_VERSION"), "build", "widgets"]
     );
     let _ = std::fs::remove_dir_all(dir);
 }
