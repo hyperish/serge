@@ -12,6 +12,8 @@ env:
   HYVE_REF: ab3b833cdf5bfd5ea32d5f20b92fc198447d70d8
   ORBIC_REF: d606b1a03405d83c4ac086c58d8d8c2434237474
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
   # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
   MSRV: "1.94"
   # Must match `wasm-bindgen` in Cargo.lock.
@@ -20,7 +22,7 @@ env:
 jobs:
   check:
     name: Format, Clippy & Test (stable)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: serge
@@ -48,6 +50,10 @@ jobs:
       # The CPU snapshot tests need a system font; the GPU parity tests run
       # on Mesa's software Vulkan (lavapipe); the CLI test bundles the
       # playground for the web.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
@@ -114,7 +120,7 @@ jobs:
 
   browser:
     name: Web target in headless Chrome
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: serge
@@ -162,7 +168,7 @@ jobs:
 
   android:
     name: Android NativeActivity against a real backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         profile: [pixel_6, pixel_fold]
@@ -201,7 +207,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          sdkmanager 'ndk;27.2.12479018' 'platforms;android-35' 'build-tools;35.0.0'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-35' 'build-tools;35.0.0'
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
           cargo install cargo-apk --version 0.10.0 --locked
       - name: Build the server and the debug APK
@@ -256,6 +262,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: serge
+      - name: Install the Linux Secret Service development dependency
+        run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends libdbus-1-dev
       - name: Check (native)
         run: |
           cargo check --workspace --all-targets --locked
@@ -265,7 +273,7 @@ jobs:
 
   macos:
     name: Desktop build and tests (macOS)
-    runs-on: macos-latest
+    runs-on: macos-15
     defaults:
       run:
         working-directory: serge
