@@ -170,8 +170,9 @@ jobs:
     name: Android NativeActivity against a real backend
     runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
-        profile: [pixel_6, pixel_fold]
+        profile: [pixel_6, '7.6in Foldable']
     defaults:
       run:
         working-directory: serge
@@ -222,6 +223,8 @@ jobs:
           cargo apk build --lib -p serge-playground --target x86_64-linux-android
           cargo run --locked -p serge-cli -- widgets -p serge-playground
       - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          SERGE_REQUIRE_FOLD: ${{ matrix.profile == '7.6in Foldable' }}
         with:
           api-level: 35
           target: google_apis

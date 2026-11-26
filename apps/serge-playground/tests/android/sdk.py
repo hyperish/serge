@@ -123,6 +123,8 @@ def accepted(serial, public_host=None):
                 raise ValueError("the GATT fixture requires a second independent emulator")
             extra["SERGE_PROBE_GATT"] = str(uuid.uuid4())
         foldable = "HALF_OPENED" in device("shell", "cmd", "device_state", "print-states")
+        if os.environ.get("SERGE_REQUIRE_FOLD") == "true" and not foldable:
+            raise RuntimeError("the foldable emulator must expose the HALF_OPENED posture")
         if foldable:
             original = device("emu", "sensor", "get", "hinge-angle0").splitlines()[0].split("=")[1].strip()
             device("emu", "sensor", "set", "hinge-angle0", "180")
