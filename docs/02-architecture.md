@@ -22,7 +22,7 @@ serge/
     serge-web-dom/             # 모든 DOM/웹 기능 빌더 + Leptos식 템플릿 복제·수술적 패칭 + `persistent_signal`·오프라인 큐·a11y
     serge-web-ssr/             # 스트리밍 HTML SSR·정적 사이트 생성(SSG)·`<Title>`/`<Meta>` Head 수집 (`orbic` 서빙 연동용)
     serge-web-ionic/           # Ionic 레퍼런스 기반 적응형 웹 UI 컴포넌트·제스처·트랜지션
-    serge-web-dev/             # 최소 CRA 수준의 로컬 개발용 프리뷰·번들·HMR 데브 서버 (`hyve preview` 연동)
+    serge-web-dev/             # 최소 CRA 수준의 로컬 개발 서버·번들·HMR (`hyve dev` 연동)
 
     # --- Native (GPU + 필수 CPU 폴백) 타깃 크레이트 ---
     serge-native/              # 네이티브 런타임: 유지 트리·시그널 동기화·장면 수집·히트 테스트·입력·UI 작업 실행기·헤드리스 하네스 (제안, 2026-11-25)
@@ -85,3 +85,18 @@ serge/
 - 최소 Rust 버전은 워크스페이스 전체 `1.94`입니다(쇼케이스가 링크하는 `orbic`의 요구).
 
 외부 의존성(포크하지 않음, 2026-11-24 `cargo info` 확인): 웹 바인딩 `wasm-bindgen` (`0.2.130`), `wasm-bindgen-futures` (`0.4.80`), `web-sys` (`0.3.107`), `js-sys` (`0.3.107`), 매크로용 `syn` (`3.0.10`), `quote` (`1.0.47`), `proc-macro2` (`1.0.107`) — 모두 `MIT OR Apache-2.0`. 네이티브의 비동기 I/O는 패밀리 공통 런타임 `tokio` (`1.54.1`, `MIT`)를 쓰고, 웹은 브라우저 이벤트 루프를 씁니다(`hyve/docs/02-architecture.md` §2.5). 이 목록에 없는 의존성은 `hyperish/docs` `05-development-rules.md` §7의 외부 의존성 규칙에 따라 추가 기록합니다.
+
+### 선택형 네이티브 어댑터 (2026-11-26)
+
+`serge/native-system`은 데스크톱 클립보드에 arboard 3.7.0, 파일·메시지 패널에 rfd 0.18.0, 사용자별 앱 데이터 경로에 directories 6.0.0을 사용합니다. `desktop-system`은 global-hotkey 0.10.0으로 OS 전역 단축키를 등록하며 창의 이벤트 루프에서 명령을 받습니다. rfd는 MIT, 나머지는 MIT 또는 Apache-2.0입니다. Linux X11 인수에서 실제 GTK 패널, xclip, OS 키 이벤트를 사용합니다. [시스템 어댑터](../crates/serge-native-sys/src/lib.rs) · [X11 인수](../apps/serge-playground/tests/system_x11.rs)
+
+`serge/webview`는 Wry 0.58.0(MIT 또는 Apache-2.0)을 선택적으로 연결합니다. macOS WKWebView와 Linux X11 WebKitGTK의 로컬 자식 문서에서 양방향 레일과 문서 재로딩을 검증했습니다. [웹뷰 동기화 계약](03-adapters-and-pipeline.md#webview-v1) · [인수 테스트](../apps/serge-playground/tests/webview.rs)
+
+
+기기의 보안 저장소는 keyring 3.6.3(MIT 또는 Apache-2.0)으로 Apple Keychain·Windows Credential Manager·Linux Secret Service를 사용합니다. Android는 앱 전용 Keystore의 AES-GCM 키와 원자적 파일 교체를 사용합니다. Android NDK 0.9.0과 JNI 0.22.4로 센서 큐·AAudio·사용자 대화상자에 접근합니다. Apple에서는 objc2 0.6.5, objc2-core-motion 및 objc2-local-authentication 0.3.2로 Core Motion과 LAContext를 호출합니다. [기기 SDK 소스](../crates/serge-native-sys/src/) · [의존성](../crates/serge-native-sys/Cargo.toml)
+
+기기 어댑터의 선택 기능은 `serge/bluetooth`의 btleplug 0.13.5(BSD-3-Clause), `serge/midi`의 midir 0.11.2(MIT), Apple Metal과 Android Vulkan용 `serge/native-camera`입니다. Android는 ash 0.38(MIT 또는 Apache-2.0)과 NDK 미디어 API로 가져온 카메라 버퍼를 샘플링합니다. Android BLE DEX를 만드는 스크립트가 원본 리비전과 체크섬을 확인합니다. Android MIDI는 API 29 이상을 사용합니다. Apple 마이크는 objc2-av-foundation 및 objc2-avf-audio 0.3.2(MIT 선택 가능)로 권한, AVAudioEngine, 샘플 링을 연결합니다. 폴더블 기능을 선택한 Android 앱은 AndroidX WindowManager 1.3.0과 Core 1.8.0(Apache-2.0)을 사용합니다. [BLE 소스와 고지](../crates/serge-native-sys/android/ble/) · [기기 SDK](../crates/serge-native-sys/src/) · [카메라 텍스처](../crates/serge-native-gpu/src/camera.rs)
+
+2026-11-26에 Taffy 0.15.1의 트리 뷰를 Serge의 배열 인덱스에 맞춰 편입했습니다. Flexbox 계산은 원본을 쓰며 페인트와 히트 테스트가 반올림 결과 배열을 공유합니다. Parley 0.13.0의 글리프 위치 계산은 씬 글리프를 직접 생성하고, 측정·페인트가 캐시된 문단을 빌립니다. CPU 프레임과 마스크는 Vello의 `PixmapMut`에 RGBA 버퍼를 바로 전달합니다. [Taffy 소스와 MIT 고지](../crates/serge-native-layout/src/compact/) · [Parley 소스와 MIT 고지](../crates/serge-native-text/src/glyph_run/) · [CPU 출력](../crates/serge-native-cpu/src/lib.rs)
+
+모바일 서명에는 P-256과 SHA-256을 씁니다. AndroidKeyStore의 명명된 개인 키는 내보낼 수 없고 장치별 하드웨어 보호 여부를 확인할 수 있습니다. Apple은 Security framework 3.7.0의 SecKey와 Secure Enclave로 일시 키를 생성합니다. 기본 보호는 장치가 잠금 해제된 동안이며 백그라운드에서 서명할 앱은 최초 잠금 해제 이후 접근을 명시할 수 있습니다. [Android 키](../crates/serge-native-sys/src/android/signing.rs) · [Apple 키](../crates/serge-native-sys/src/apple.rs) · [Apple 접근 정책](https://developer.apple.com/documentation/security/protecting-keys-with-the-secure-enclave)
