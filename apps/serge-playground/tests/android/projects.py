@@ -24,11 +24,18 @@ def exercise(adb, server_binary, apk):
     dump = f"/data/local/tmp/serge-{os.getpid()}.xml"
 
     def node(label=None, widget=None):
-        until = time.monotonic() + 25
-        seen = []
+        until = time.monotonic() + 45
+        seen, foreground = [], []
         while time.monotonic() < until:
-            device("shell", "uiautomator", "dump", dump)
+            # On a cold activity UIAutomator can report a missing root or an
+            # idle timeout with exit status zero and leave the XML unwritten.
+            report = device("shell", "uiautomator", "dump", dump).decode(errors="replace").strip()
+            if f"dumped to: {dump}" not in report:
+                time.sleep(.2)
+                continue
             tree = ET.fromstring(device("shell", "cat", dump))
+            foreground = sorted({(item.get("package", ""), item.get("text") or item.get("content-desc") or "")
+                                 for item in tree.iter("node") if item.get("package") != PKG})
             seen = []
             for item in tree.iter("node"):
                 if item.get("package") != PKG:
@@ -42,12 +49,24 @@ def exercise(adb, server_binary, apk):
                 x, y, r, b = map(int, re.findall(r"-?\d+", item.get("bounds")))
                 if r > x and b > y:
                     return (x + r) // 2, (y + b) // 2
-        foreground = sorted({item.get("package", "") for item in tree.iter("node")})
-        raise AssertionError(f"missing {label!r} {widget!r} in {seen}, foreground packages {foreground}")
+        raise AssertionError(f"missing {label!r} {widget!r} in {seen}, system UI {foreground}, {report}")
 
     def tap(label=None, widget=None):
         x, y = node(label, widget)
         device("shell", "input", "tap", str(x), str(y))
+
+    def type_title(title):
+        tap(widget="android.widget.EditText")
+        until = time.monotonic() + 30
+        while time.monotonic() < until:
+            windows = device("shell", "dumpsys", "window", "displays")
+            if re.search(rb"\btype=ime\b[^\n]*\bvisible=true\b", windows):
+                break
+            time.sleep(.2)
+        else:
+            raise AssertionError("Android did not show the keyboard for the focused project title")
+        device("shell", "input", "text", title)
+        node(title, "android.widget.EditText")
 
     def start(db, port=0):
         env = dict(os.environ, HYPERISH_ORBIC_DATABASE_URL=f"sqlite:{db}?mode=rwc",
@@ -73,6 +92,7 @@ def exercise(adb, server_binary, apk):
             device("shell", "am", "force-stop", PKG)
             device("shell", "input", "keyevent", "KEYCODE_WAKEUP")
             device("shell", "wm", "dismiss-keyguard")
+            device("shell", "am", "wait-for-broadcast-idle")
             launch()
             tap("Counter")
             tap("Increment", "android.widget.Button")
@@ -86,9 +106,7 @@ def exercise(adb, server_binary, apk):
             tap("Sign in", "android.widget.Button")
             tap("Saved")
             node("No projects yet.")
-            tap(widget="android.widget.EditText")
-            device("shell", "input", "text", "AndroidProject")
-            node("AndroidProject", "android.widget.EditText")
+            type_title("AndroidProject")
             tap("Save", "android.widget.Button")
             node("Saved #1 on the server.")
             node("#1 AndroidProject")
@@ -99,15 +117,15 @@ def exercise(adb, server_binary, apk):
             server.terminate()
             server.wait(timeout=10)
             server, _ = start(db, port)
-            tap(widget="android.widget.EditText")
-            device("shell", "input", "text", "RefusedProject")
-            node("RefusedProject", "android.widget.EditText")
+            type_title("RefusedProject")
             tap("Save", "android.widget.Button")
             node("The server refused: sign in to continue (unauthenticated)")
             with sqlite3.connect(db) as cx:
                 assert cx.execute("SELECT owner,title FROM projects").fetchall() == [("demo", "AndroidProject")]
             print("Android touch, accessibility, IME, suspend/resume, guarded save, reload, refusal and SQLite passed.")
-        except Exception:
+        except Exception as error:
+            if isinstance(error, subprocess.CalledProcessError) and error.output:
+                print(error.output.decode(errors="replace"), file=sys.stderr)
             for args in [("shell", "dumpsys", "activity", "exit-info", PKG),
                          ("logcat", "-d", "-s", "RustStdoutStderr", "AndroidRuntime", "libc", "DEBUG")]:
                 log = subprocess.run([*adb, *args], capture_output=True, text=True, errors="replace")
