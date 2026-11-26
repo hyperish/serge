@@ -40,6 +40,130 @@ fn the_counter_counts() {
     assert!(t.x >= 16.0 && b.y >= t.bottom() + 12.0 - 0.5, "{t:?} {b:?}");
 }
 
+#[test]
+fn accessibility_and_keyboard_share_live_controls() {
+    use accesskit::{Action, ActionData, ActionRequest, Role, Toggled, TreeId};
+    let show = signal(true);
+    let calls = signal(0);
+    let checked = signal(false);
+    let draft = signal(String::new());
+    let level = signal(0.0_f32);
+    let h = Headless::new(400.0, 500.0, move || {
+        ui! {
+            Stack {
+                if show() {
+                    Button { text: "Save", clicked => { calls.update(|n| *n += 1); } }
+                }
+                Button { text: "Unavailable", disabled: true, clicked => { calls.set(-1); } }
+                Checkbox { text: "Ready", checked: checked(), changed(v) => { checked.set(v); } }
+                Input { placeholder: "Title", value: draft(), changed(v) => { draft.set(v); } }
+                Slider { range: 0.0..=10.0, step: 2.0, value: level(), changed(v) => { level.set(v); } }
+            }
+        }
+    });
+    let tree = || {
+        h.settle();
+        h.ui().accessibility_tree("Project", 2.0)
+    };
+    let action = |target_node, action, data| {
+        h.ui().accessibility_action(ActionRequest {
+            action,
+            target_tree: TreeId::ROOT,
+            target_node,
+            data,
+        })
+    };
+    let initial = tree();
+    let (save, button) = initial
+        .nodes
+        .iter()
+        .find(|(_, n)| n.label() == Some("Save"))
+        .unwrap();
+    let (disabled, unavailable) = initial
+        .nodes
+        .iter()
+        .find(|(_, n)| n.label() == Some("Unavailable"))
+        .unwrap();
+    let (checkbox, _) = initial
+        .nodes
+        .iter()
+        .find(|(_, n)| n.role() == Role::CheckBox)
+        .unwrap();
+    let (input, input_node) = initial
+        .nodes
+        .iter()
+        .find(|(_, n)| n.role() == Role::TextInput)
+        .unwrap();
+    let (slider, _) = initial
+        .nodes
+        .iter()
+        .find(|(_, n)| n.role() == Role::Slider)
+        .unwrap();
+    assert_eq!(button.role(), Role::Button);
+    assert_eq!(input_node.placeholder(), Some("Title"));
+    let rect = h.rect_of("Save").unwrap();
+    assert_eq!(
+        button.bounds().unwrap().width(),
+        2.0 * f64::from(rect.width)
+    );
+    assert!(unavailable.is_disabled() && !unavailable.supports_action(Action::Click));
+    h.press(Key::Tab);
+    assert_eq!(tree().focus, *save);
+    h.press(Key::Enter);
+    action(*save, Action::Click, None);
+    action(*disabled, Action::Click, None);
+    assert_eq!(calls(), 2);
+    h.press(Key::Tab);
+    assert_eq!(tree().focus, *checkbox);
+    h.press(Key::Space);
+    assert!(checked());
+    assert_eq!(
+        tree()
+            .nodes
+            .iter()
+            .find(|(id, _)| id == checkbox)
+            .unwrap()
+            .1
+            .toggled(),
+        Some(Toggled::True)
+    );
+    action(
+        *input,
+        Action::SetValue,
+        Some(ActionData::Value("Project\nOne".into())),
+    );
+    assert_eq!(draft(), "ProjectOne");
+    assert_eq!(tree().focus, *input);
+    h.press(Key::Space);
+    assert_eq!(draft(), "ProjectOne ");
+    action(
+        *slider,
+        Action::SetValue,
+        Some(ActionData::NumericValue(9.5)),
+    );
+    assert_eq!(level(), 10.0);
+    action(*slider, Action::Focus, None);
+    h.press(Key::Step(false));
+    assert_eq!(level(), 8.0);
+    h.press(Key::BackTab);
+    assert_eq!(tree().focus, *input);
+    show.set(false);
+    h.settle();
+    show.set(true);
+    let replacement = tree();
+    assert_ne!(
+        replacement
+            .nodes
+            .iter()
+            .find(|(_, n)| n.label() == Some("Save"))
+            .unwrap()
+            .0,
+        *save
+    );
+    action(*save, Action::Click, None);
+    assert_eq!(calls(), 2);
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Todo {
     pub id: u32,
@@ -169,6 +293,16 @@ fn sliders_drive_text_and_canvas_paint() {
     assert!(h.shows("Exposure: 5.00"), "{:?}", h.texts());
     let full = canvas_fill_width(&h.settle()).expect("canvas repainted");
     assert!((full - 2.0 * half).abs() < 1.0, "{half} {full}");
+}
+
+#[test]
+fn worker_writes_repaint_the_native_view_on_its_owner_thread() {
+    let value = shared_signal(1u32);
+    let h = Headless::new(240.0, 120.0, move || ui! { Text { "Worker {value()}" } });
+    assert!(h.shows("Worker 1"));
+    std::thread::spawn(move || value.set(2)).join().unwrap();
+    h.settle();
+    assert!(h.shows("Worker 2"));
 }
 
 #[component]

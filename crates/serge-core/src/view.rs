@@ -155,6 +155,20 @@ pub fn install_executor(executor: Rc<dyn Executor>) {
     EXECUTOR.with(|e| *e.borrow_mut() = Some(executor));
 }
 
+/// Temporarily installs an executor on this thread, restoring it on return or unwind.
+pub fn with_executor<R>(executor: Rc<dyn Executor>, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<Rc<dyn Executor>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            EXECUTOR.with(|slot| {
+                slot.replace(self.0.take());
+            });
+        }
+    }
+    let _restore = Restore(EXECUTOR.with(|slot| slot.replace(Some(executor))));
+    f()
+}
+
 /// Runs `future` as a task of the current view: its scope stays current
 /// across `.await`s (so `#[server]` calls find the transport and its
 /// cancellation), and the task is dropped when the view unmounts. This is

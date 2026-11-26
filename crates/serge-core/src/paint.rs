@@ -267,6 +267,13 @@ impl PartialEq for FontHandle {
 /// (`docs/03-adapters-and-pipeline.md` §1.2).
 #[derive(Clone, PartialEq, Debug)]
 pub enum ScenePrimitive {
+    /// A mounted local surface, composited in scene order.
+    ExternalTexture {
+        /// Slot and generation resolved by the local renderer.
+        key: crate::viewport::TextureKey,
+        /// Destination rectangle in logical window coordinates.
+        rect: Rect,
+    },
     /// A filled rectangle with rounded corners.
     Quad {
         /// Where.
@@ -325,8 +332,19 @@ pub enum ScenePrimitive {
 /// A source of frames outside the reactive graph — a ring buffer an engine
 /// thread writes to. Reading one inside `paint` makes the canvas repaint on
 /// the next frame after the source changes.
-#[derive(Clone, Debug, Default)]
-pub struct FrameSource(Arc<AtomicU64>);
+#[derive(Clone, Default)]
+pub struct FrameSource {
+    local: Arc<AtomicU64>,
+    external: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
+}
+
+impl std::fmt::Debug for FrameSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FrameSource")
+            .field("version", &self.version())
+            .finish()
+    }
+}
 
 impl FrameSource {
     /// A new source.
@@ -334,14 +352,24 @@ impl FrameSource {
         FrameSource::default()
     }
 
+    /// Observes an external producer’s revision when the renderer polls a frame.
+    pub fn with_revision(read: impl Fn() -> u64 + Send + Sync + 'static) -> Self {
+        Self {
+            external: Some(Arc::new(read)),
+            ..Self::default()
+        }
+    }
+
     /// Marks new data (any thread).
     pub fn bump(&self) {
-        self.0.fetch_add(1, Ordering::Release);
+        self.local.fetch_add(1, Ordering::Release);
     }
 
     /// The change counter.
     pub fn version(&self) -> u64 {
-        self.0.load(Ordering::Acquire)
+        self.local
+            .load(Ordering::Acquire)
+            .wrapping_add(self.external.as_ref().map_or(0, |read| read()))
     }
 
     /// Records that the paint running on this thread read this source.

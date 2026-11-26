@@ -17,10 +17,13 @@
 #![cfg(target_arch = "wasm32")]
 
 mod canvas;
+mod text;
+mod viewport;
+pub use viewport::WebViewport;
 mod exec;
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use hyve::Scope;
@@ -103,6 +106,7 @@ struct Ctx {
     theme: Theme,
     /// Templates by place (`Site` address).
     templates: RefCell<HashMap<usize, web_sys::Element>>,
+    prerendered: RefCell<VecDeque<web_sys::Element>>,
     /// Elements created and cloned (tests).
     counts: std::cell::Cell<(u32, u32)>,
 }
@@ -166,6 +170,29 @@ fn install_executor() {
     }
 }
 
+fn prerendered(root: &web_sys::Element) -> VecDeque<web_sys::Element> {
+    if !root.has_attribute("data-serge-prerendered") {
+        return VecDeque::new();
+    }
+    let document_build = document()
+        .query_selector("meta[name='serge-build']")
+        .ok()
+        .flatten()
+        .and_then(|e| e.get_attribute("content"));
+    if option_env!("SERGE_BUILD_ID").is_none()
+        || document_build.as_deref() != option_env!("SERGE_BUILD_ID")
+    {
+        root.set_text_content(None);
+        return VecDeque::new();
+    }
+    let nodes = root
+        .query_selector_all("[data-serge-node]")
+        .expect("fixed selector");
+    (0..nodes.length())
+        .filter_map(|i| nodes.item(i)?.dyn_into().ok())
+        .collect()
+}
+
 /// Mounts `root()` into `container` under `scope`.
 pub fn mount(
     container: &web_sys::Element,
@@ -179,14 +206,24 @@ pub fn mount(
         doc: document(),
         theme,
         templates: RefCell::default(),
+        prerendered: RefCell::new(prerendered(container)),
         counts: std::cell::Cell::new((0, 0)),
     });
     let view = View::root(scope);
+    #[cfg(feature = "ionic")]
+    view.owner().with(|| {
+        let installed = serge_web_ionic::install(container);
+        on_cleanup(move || drop(installed));
+    });
     let parent: web_sys::Node = container.clone().into();
     view.run(|| {
         let el = untrack(root);
         mount_node(&cx, el.0, &parent, None, &view);
     });
+    for node in cx.prerendered.take() {
+        node.remove();
+    }
+    let _ = container.remove_attribute("data-serge-prerendered");
     Mounted {
         view,
         root: container.clone(),
@@ -226,7 +263,8 @@ pub fn run(app: serge_router::Assembled) {
     }
     on_pop.forget();
     let scope = app.scope.clone();
-    let mounted = mount(&page_root(), scope, move || app.element());
+    let root = page_root();
+    let mounted = mount(&root, scope, move || app.element());
     std::mem::forget(mounted);
 }
 
@@ -416,22 +454,6 @@ fn mount_node(
     }
 }
 
-fn tag(kind: Kind) -> (&'static str, &'static str) {
-    match kind {
-        Kind::View => ("div", "serge-view"),
-        Kind::Stack => ("div", "serge-stack"),
-        Kind::Card => ("div", "serge-card"),
-        Kind::Text => ("div", "serge-text"),
-        Kind::Button => ("button", "serge-button"),
-        Kind::Slider => ("input", "serge-slider"),
-        Kind::Input => ("input", "serge-input"),
-        Kind::Checkbox => ("label", "serge-checkbox"),
-        Kind::Canvas => ("div", "serge-canvas"),
-        Kind::ProgressBar => ("div", "serge-progress"),
-        Kind::Link => ("a", "serge-link"),
-    }
-}
-
 /// Listens for `event` on `target` while the current owner lives.
 fn listen(
     target: &web_sys::EventTarget,
@@ -456,7 +478,7 @@ fn fmt_num(v: f32) -> String {
 fn create(cx: &Ctx, kind: Kind) -> web_sys::Element {
     let (c, k) = cx.counts.get();
     cx.counts.set((c + 1, k));
-    let (tag_name, class) = tag(kind);
+    let (tag_name, class) = kind.html();
     let el = cx.doc.create_element(tag_name).expect("create element");
     let _ = el.set_attribute("class", class);
     match kind {
@@ -549,7 +571,7 @@ fn inlined(child: &Widget, site: &Site) -> bool {
 /// The template for `w`'s place.
 fn skeleton(cx: &Ctx, w: &Widget, site: &Site) -> web_sys::Element {
     let el = create(cx, w.kind);
-    let (_, class) = tag(w.kind);
+    let (_, class) = w.kind.html();
     let (input, label) = parts(w.kind, &el);
     if w.style.iter().all(Prop::is_const) {
         let css = untrack(|| Widget::resolve_style(w.kind, &cx.theme, &w.style).to_css());
@@ -585,6 +607,41 @@ fn mount_widget(
     before: Option<&web_sys::Node>,
     view: &View,
 ) {
+    // Server and client traverse widgets in declaration order. Markers and
+    // event handlers are installed by the same path used for a fresh mount.
+    let (tag, class) = w.kind.html();
+    let candidate = {
+        let mut remaining = cx.prerendered.borrow_mut();
+        let index = remaining.iter().position(|el| {
+            el.parent_node()
+                .is_some_and(|p| p.is_same_node(Some(parent)))
+                && el.tag_name().eq_ignore_ascii_case(tag)
+                && el.get_attribute("data-serge-node").as_deref() == Some(class)
+        });
+        index.and_then(|i| remaining.remove(i))
+    };
+    if let Some(el) = candidate {
+        let fixed = match w.kind {
+            Kind::Checkbox => {
+                el.first_element_child()
+                    .is_some_and(|n| n.tag_name() == "INPUT")
+                    && el
+                        .last_element_child()
+                        .is_some_and(|n| n.tag_name() == "SPAN")
+            }
+            Kind::ProgressBar => el
+                .first_element_child()
+                .is_some_and(|n| n.tag_name() == "DIV"),
+            _ => true,
+        };
+        if fixed {
+            let _ = el.remove_attribute("data-serge-node");
+            wire(cx, w, &el, None, view);
+            insert(parent, &el, before);
+            return;
+        }
+        el.remove();
+    }
     let (el, site) = match w.site {
         Some(site) => {
             let key = std::ptr::from_ref(site) as usize;
@@ -624,7 +681,7 @@ fn wire(cx: &Rc<Ctx>, w: Widget, el: &web_sys::Element, site: Option<&'static Si
         children,
         site: _,
     } = w;
-    let (_, class) = tag(kind);
+    let (_, class) = kind.html();
     let html: HtmlElement = el.clone().unchecked_into();
     let (input, label) = parts(kind, el);
     let cloned = site.is_some();
@@ -649,11 +706,30 @@ fn wire(cx: &Rc<Ctx>, w: Widget, el: &web_sys::Element, site: Option<&'static Si
     }
 
     // Attributes.
+    let text_target =
+        if children.is_empty() && attrs.iter().filter(|(a, _)| *a == Attr::Text).count() == 1 {
+            match kind {
+                Kind::Checkbox => label.as_ref(),
+                Kind::Text | Kind::Button | Kind::Link => Some(el),
+                _ => None,
+            }
+        } else {
+            None
+        };
     let baked: Vec<bool> = (0..attrs.len())
         .map(|i| cloned && baked_attr(kind, &attrs, i))
         .collect();
     for ((a, p), baked) in attrs.into_iter().zip(baked) {
         if baked {
+            continue;
+        }
+        if a == Attr::Text
+            && let (Some(target), Prop::Dynamic(read)) = (text_target, &p)
+        {
+            let mut slot = text::TextSlot::adopt(target, &cx.doc);
+            let read = read.clone();
+            let view = view.clone();
+            effect(move || view.enter(|| slot.rebuild(read())));
             continue;
         }
         let set = {
@@ -727,6 +803,7 @@ fn wire(cx: &Rc<Ctx>, w: Widget, el: &web_sys::Element, site: Option<&'static Si
                     v.run(|| f());
                 }
             }),
+            Handler::Viewport(producer) => viewport::mount(el, producer, view),
             Handler::Paint(paint) => {
                 canvas::mount(el, view, paint);
             }

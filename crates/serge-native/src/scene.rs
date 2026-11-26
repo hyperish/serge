@@ -153,7 +153,16 @@ pub(crate) fn layout(tree: &mut Tree, text: &mut TextSystem) -> Vec<(usize, Rect
             place(tree, nodes, ids, boxes, c, rect.x, rect.y, resized);
         }
     }
-    place(tree, &nodes, &ids, &boxes, 0, 0.0, 0.0, &mut resized);
+    place(
+        tree,
+        &nodes,
+        &ids,
+        &boxes,
+        0,
+        tree.origin.0,
+        tree.origin.1,
+        &mut resized,
+    );
     tree.content_height = boxes[0].height;
     let max_scroll = (tree.content_height - height).max(0.0);
     tree.scroll_y = tree.scroll_y.clamp(0.0, max_scroll);
@@ -164,7 +173,7 @@ pub(crate) fn layout(tree: &mut Tree, text: &mut TextSystem) -> Vec<(usize, Rect
 pub(crate) fn collect(tree: &Tree, text: &mut TextSystem, theme: &Theme) -> Vec<ScenePrimitive> {
     let (w, h) = tree.size;
     let mut out = vec![ScenePrimitive::Quad {
-        rect: Rect::new(0.0, 0.0, w, h),
+        rect: Rect::new(tree.origin.0, tree.origin.1, w, h),
         color: theme.background,
         radius: 0.0,
     }];
@@ -233,7 +242,7 @@ fn draw(
         });
     }
     let focused = tree.focus == Some(id);
-    let (bw, bc) = if focused && kind == Kind::Input {
+    let (bw, bc) = if focused && n.focusable() {
         (2.0, theme.primary)
     } else {
         (px(s.border_width), s.border_color)
@@ -252,7 +261,7 @@ fn draw(
     match kind {
         Kind::View | Kind::Stack | Kind::Card => {}
         Kind::Text | Kind::Link => {
-            let l = text.layout(n.text(), size, weight, Some(c.width.max(1.0)));
+            let l = text.layout_ref(n.text(), size, weight, Some(c.width.max(1.0)));
             out.extend(l.primitives(Point::new(c.x, c.y), s.color));
             if kind == Kind::Link && hovered {
                 out.push(ScenePrimitive::Quad {
@@ -263,7 +272,7 @@ fn draw(
             }
         }
         Kind::Button => {
-            let l = text.layout(n.text(), size, weight, Some(c.width.max(1.0)));
+            let l = text.layout_ref(n.text(), size, weight, Some(c.width.max(1.0)));
             let origin = Point::new(
                 c.x + (c.width - l.width) / 2.0,
                 c.y + (c.height - l.height) / 2.0,
@@ -277,7 +286,7 @@ fn draw(
         }
         Kind::Input => {
             let (t, placeholder) = label(n);
-            let l = text.layout(t, size, weight, None);
+            let l = text.layout_ref(t, size, weight, None);
             let y = c.y + (c.height - l.height) / 2.0;
             out.push(ScenePrimitive::PushClip(c));
             out.extend(l.primitives(
@@ -330,7 +339,7 @@ fn draw(
                 });
             }
             let x = c.x + CHECK + px(s.gap);
-            let l = text.layout(n.text(), size, weight, Some((c.right() - x).max(1.0)));
+            let l = text.layout_ref(n.text(), size, weight, Some((c.right() - x).max(1.0)));
             out.extend(l.primitives(Point::new(x, c.y + (c.height - l.height) / 2.0), s.color));
         }
         Kind::Slider => {
@@ -381,6 +390,13 @@ fn draw(
         }
         Kind::Canvas => {
             out.push(ScenePrimitive::PushClip(rect));
+            if let Some(slot) = &n.viewport {
+                let size = serge_core::viewport::Extent::pixels(rect, tree.scale);
+                out.push(ScenePrimitive::ExternalTexture {
+                    key: slot.frame(size),
+                    rect,
+                });
+            }
             if let Some(cv) = &n.canvas {
                 for cmd in &cv.commands {
                     paint_cmd(cmd, rect.x, rect.y, text, out);
@@ -441,7 +457,7 @@ fn paint_cmd(
             size,
             color,
         } => {
-            let l = text.layout(t, *size, 400, None);
+            let l = text.layout_ref(t, *size, 400, None);
             out.extend(l.primitives(p(origin), *color));
         }
     }
@@ -453,13 +469,7 @@ pub(crate) fn hit(tree: &Tree, x: f32, y: f32) -> Option<usize> {
     let p = Point::new(x, y + tree.scroll_y);
     let mut found = None;
     tree.walk(tree.root, &mut |id, n| {
-        if let NKind::Widget(k) = n.kind
-            && matches!(
-                k,
-                Kind::Button | Kind::Slider | Kind::Input | Kind::Checkbox | Kind::Link
-            )
-            && n.rect.contains(p)
-        {
+        if n.focusable() && n.rect.contains(p) {
             found = Some(id);
         }
     });

@@ -89,6 +89,11 @@ fn fs_main(v: Varyings) -> @location(0) vec4<f32> {
     let clip = box_coverage(p, v.clip.xy, v.clip.zw);
     let lo = v.rect.xy;
     let hi = v.rect.xy + v.rect.zw;
+    if kind > 4.5 {
+        let dims = vec2<i32>(textureDimensions(glyph_atlas));
+        let at = clamp(vec2<i32>((p - lo) / max(hi-lo, vec2<f32>(0.0001)) * vec2<f32>(dims)),vec2<i32>(0),dims-1);
+        return textureLoad(glyph_atlas, at, 0) * clip;
+    }
     let texel = vec2<i32>(floor(p - lo)) + vec2<i32>(v.extra.xy);
     let paint = vec4<f32>(v.color.rgb * v.color.a, v.color.a);
     if kind < BORDER - 0.5 {

@@ -29,6 +29,7 @@ impl Wake for TaskWaker {
 }
 
 struct Inner {
+    _shared_wake: hyve::state::SharedWake,
     tasks: RefCell<HashMap<u64, LocalFuture>>,
     aborted: RefCell<Vec<u64>>,
     next: Cell<u64>,
@@ -53,19 +54,22 @@ impl LocalExecutor {
     /// An executor that calls `notify` (from any thread) when a task is
     /// ready to be polled.
     pub fn new(notify: impl Fn() + Send + Sync + 'static) -> LocalExecutor {
+        let notify = Arc::new(notify);
+        let wake = notify.clone();
         LocalExecutor(Rc::new(Inner {
+            _shared_wake: hyve::state::on_shared_wake(move || wake()),
             tasks: RefCell::new(HashMap::new()),
             aborted: RefCell::new(Vec::new()),
             next: Cell::new(0),
             ready: Arc::new(Mutex::new(Vec::new())),
-            notify: Arc::new(notify),
+            notify,
         }))
     }
 
     /// Polls every ready task once; returns whether any was polled.
     pub fn run_ready(&self) -> bool {
         let _rt = serge_core::runtime().enter();
-        let mut any = false;
+        let mut any = hyve::state::drain_shared_updates();
         loop {
             let ids: Vec<u64> = std::mem::take(&mut *self.0.ready.lock().expect("ready queue"));
             if ids.is_empty() {

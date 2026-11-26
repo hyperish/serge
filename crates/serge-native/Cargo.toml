@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+accesskit.workspace = true
 hyve.workspace = true
 serge-core.workspace = true
 serge-native-layout.workspace = true

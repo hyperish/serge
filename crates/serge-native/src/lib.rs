@@ -6,9 +6,11 @@
 //!
 //! [`Headless`] drives the same runtime without a window (tests, CI).
 
+mod accessibility;
 mod exec;
 mod scene;
 mod tree;
+pub use accesskit;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -16,7 +18,9 @@ use std::time::{Duration, Instant};
 
 use hyve::Scope;
 use hyve::state::untrack;
-use serge_core::{Attr, AttrValue, Cursor, Element, Handler, Kind, Rect, ScenePrimitive, View};
+use serge_core::{
+    Attr, AttrValue, Cursor, Element, Handler, Kind, Point, Rect, ScenePrimitive, View,
+};
 use serge_native_text::TextSystem;
 use serge_style::Theme;
 
@@ -30,10 +34,16 @@ use tree::{NKind, Shared, Tree};
 pub enum Key {
     /// Deletes the character before the caret.
     Backspace,
-    /// Submits an input.
+    /// Submits an input or activates a focused control.
     Enter,
-    /// Moves focus to the next input.
+    /// Inserts a space or activates a focused button or checkbox.
+    Space,
+    /// Moves focus to the next enabled control.
     Tab,
+    /// Moves focus to the previous enabled control.
+    BackTab,
+    /// Increases or decreases a focused slider by one step.
+    Step(bool),
     /// Drops focus.
     Escape,
 }
@@ -155,10 +165,18 @@ impl Ui {
 
     /// Sets the window size in logical pixels.
     pub fn resize(&self, width: f32, height: f32) {
-        let mut t = self.shared.tree.borrow_mut();
-        if t.size != (width, height) {
-            t.size = (width, height);
-            t.dirty = true;
+        self.set_viewport(Rect::new(0.0, 0.0, width, height));
+    }
+
+    /// Lays out controls within the platform's usable rectangle, in window coordinates.
+    pub fn set_viewport(&self, bounds: Rect) {
+        let mut tree = self.shared.tree.borrow_mut();
+        let origin = (bounds.x, bounds.y);
+        let size = (bounds.width.max(0.0), bounds.height.max(0.0));
+        if tree.origin != origin || tree.size != size {
+            tree.origin = origin;
+            tree.size = size;
+            tree.dirty = true;
         }
     }
 
@@ -171,6 +189,7 @@ impl Ui {
     fn frame_sources_changed(&self, t: &Tree) -> bool {
         let mut changed = false;
         t.walk(t.root, &mut |_, n| {
+            changed |= n.viewport.as_ref().is_some_and(|v| v.dirty());
             if let Some(c) = &n.canvas
                 && serge_core::paint::sources_changed(&c.sources)
             {
@@ -186,7 +205,7 @@ impl Ui {
         let t = self.shared.tree.borrow();
         let mut any = false;
         t.walk(t.root, &mut |_, n| {
-            if n.canvas.as_ref().is_some_and(|c| !c.sources.is_empty()) {
+            if n.viewport.is_some() || n.canvas.as_ref().is_some_and(|c| !c.sources.is_empty()) {
                 any = true;
             }
         });
@@ -195,6 +214,12 @@ impl Ui {
 
     /// Lays out and collects the scene.
     pub fn frame(&self) -> Vec<ScenePrimitive> {
+        self.frame_at(1.0)
+    }
+
+    /// Collects a frame for a specific physical pixel scale.
+    pub fn frame_at(&self, scale: f32) -> Vec<ScenePrimitive> {
+        self.shared.tree.borrow_mut().scale = scale;
         // Canvases whose frame sources changed repaint first.
         let stale: Vec<_> = {
             let t = self.shared.tree.borrow();
@@ -251,8 +276,45 @@ impl Ui {
             .map(|h| (h.clone(), n.view.clone()))
     }
 
+    /// Invalidates viewport resources after the native surface has been released.
+    pub fn invalidate_surfaces(&self) {
+        let mut tree = self.shared.tree.borrow_mut();
+        tree.walk(tree.root, &mut |_, n| {
+            if let Some(slot) = &n.viewport {
+                slot.invalidate()
+            }
+        });
+        tree.dirty = true;
+    }
+
+    fn viewport_pointer(
+        &self,
+        x: f32,
+        y: f32,
+        event: impl FnOnce(Point) -> serge_core::viewport::Pointer,
+        captured: bool,
+    ) {
+        let hit = {
+            let tree = self.shared.tree.borrow();
+            let id = if captured { tree.pressed } else { None }.or_else(|| scene::hit(&tree, x, y));
+            id.and_then(|id| tree.node(id)).and_then(|n| {
+                Some((
+                    n.viewport.clone()?,
+                    Point::new(
+                        (x - n.rect.x) * tree.scale,
+                        (y + tree.scroll_y - n.rect.y) * tree.scale,
+                    ),
+                ))
+            })
+        };
+        if let Some((slot, point)) = hit {
+            slot.pointer(event(point))
+        }
+    }
+
     /// The pointer moved; returns whether a frame is needed.
     pub fn pointer_move(&self, x: f32, y: f32) -> bool {
+        self.viewport_pointer(x, y, serge_core::viewport::Pointer::Move, true);
         let drag = self.shared.tree.borrow().drag;
         if let Some(id) = drag {
             self.slide(id, x);
@@ -270,14 +332,13 @@ impl Ui {
 
     /// The primary button went down.
     pub fn pointer_down(&self, x: f32, y: f32) {
+        self.viewport_pointer(x, y, serge_core::viewport::Pointer::Down, false);
         let target = {
             let mut t = self.shared.tree.borrow_mut();
             let h = scene::hit(&t, x, y);
             t.hover = h;
             t.pressed = h;
-            t.focus = h.filter(|&id| {
-                matches!(t.node(id).map(|n| n.kind), Some(NKind::Widget(Kind::Input)))
-            });
+            t.focus = h;
             t.dirty = true;
             h
         };
@@ -289,8 +350,36 @@ impl Ui {
         }
     }
 
+    /// Stops an interrupted pointer gesture without activating the pressed control.
+    pub fn pointer_cancel(&self) {
+        let slot = {
+            let tree = self.shared.tree.borrow();
+            tree.pressed
+                .and_then(|id| tree.node(id))
+                .and_then(|n| n.viewport.clone())
+        };
+        if let Some(slot) = slot {
+            slot.pointer(serge_core::viewport::Pointer::Cancel);
+        }
+
+        let mut tree = self.shared.tree.borrow_mut();
+        tree.pressed = None;
+        tree.drag = None;
+        tree.hover = None;
+        tree.dirty = true;
+    }
+
+    /// Whether the focused control accepts input from a platform keyboard.
+    pub fn wants_text_input(&self) -> bool {
+        let tree = self.shared.tree.borrow();
+        tree.focus.and_then(|id| tree.node(id)).is_some_and(|node| {
+            node.kind == NKind::Widget(Kind::Input) && !node.flag(Attr::Disabled)
+        })
+    }
+
     /// The primary button went up: clicks, toggles.
     pub fn pointer_up(&self, x: f32, y: f32) {
+        self.viewport_pointer(x, y, serge_core::viewport::Pointer::Up, true);
         let (pressed, over) = {
             let mut t = self.shared.tree.borrow_mut();
             let p = t.pressed.take();
@@ -301,6 +390,10 @@ impl Ui {
         let Some(id) = pressed.filter(|p| Some(*p) == over) else {
             return;
         };
+        self.activate(id);
+    }
+
+    fn activate(&self, id: usize) {
         let (kind, disabled, checked, href) = {
             let t = self.shared.tree.borrow();
             let Some(n) = t.node(id) else { return };
@@ -319,14 +412,14 @@ impl Ui {
                     v.run(|| f());
                 }
             }
-            Some(Kind::Checkbox) => {
+            Some(Kind::Checkbox) if !disabled => {
                 if let Some((Handler::ChangedBool(f), v)) =
                     self.handler(id, |h| matches!(h, Handler::ChangedBool(_)))
                 {
                     v.run(|| f(!checked));
                 }
             }
-            Some(Kind::Link) => {
+            Some(Kind::Link) if !disabled => {
                 if let Some(to) = href {
                     let v = self.shared.tree.borrow().node(id).map(|n| n.view.clone());
                     if let Some(v) = v {
@@ -362,31 +455,46 @@ impl Ui {
             Key::Backspace => self.edit(|t| {
                 t.pop();
             }),
-            Key::Enter => {
-                let focus = self.shared.tree.borrow().focus;
-                if let Some(id) = focus
-                    && let Some((Handler::Submitted(f), v)) =
-                        self.handler(id, |h| matches!(h, Handler::Submitted(_)))
-                {
-                    v.run(|| f());
+            Key::Enter | Key::Space | Key::Step(_) => {
+                let Some(id) = self.shared.tree.borrow().focus else {
+                    return;
+                };
+                match (self.kind(id), key) {
+                    (Some(Kind::Input), Key::Enter) => {
+                        if let Some((Handler::Submitted(f), v)) =
+                            self.handler(id, |h| matches!(h, Handler::Submitted(_)))
+                        {
+                            v.run(|| f());
+                        }
+                    }
+                    (Some(Kind::Input), Key::Space) => self.text_input(" "),
+                    (Some(Kind::Button | Kind::Checkbox), Key::Space | Key::Enter)
+                    | (Some(Kind::Link), Key::Enter) => self.activate(id),
+                    (Some(Kind::Slider), Key::Step(up)) => self.set_slider(id, |n, step| {
+                        n.num(Attr::Value, n.num(Attr::Min, 0.0)) + if up { step } else { -step }
+                    }),
+                    _ => {}
                 }
             }
             Key::Escape => {
                 self.shared.tree.borrow_mut().focus = None;
             }
-            Key::Tab => {
+            Key::Tab | Key::BackTab => {
                 let mut t = self.shared.tree.borrow_mut();
-                let mut inputs = Vec::new();
+                let mut controls = Vec::new();
                 t.walk(t.root, &mut |id, n| {
-                    if n.kind == NKind::Widget(Kind::Input) {
-                        inputs.push(id);
+                    if n.focusable() {
+                        controls.push(id);
                     }
                 });
-                let next = match t.focus.and_then(|f| inputs.iter().position(|i| *i == f)) {
-                    Some(p) => inputs.get(p + 1).or(inputs.first()).copied(),
-                    None => inputs.first().copied(),
-                };
-                t.focus = next;
+                if key == Key::BackTab {
+                    controls.reverse();
+                }
+                let position = controls.iter().position(|id| Some(*id) == t.focus);
+                t.focus = position
+                    .and_then(|p| controls.get(p + 1))
+                    .or(controls.first())
+                    .copied();
             }
         }
         self.shared.changed();
@@ -397,6 +505,9 @@ impl Ui {
             let mut t = self.shared.tree.borrow_mut();
             let Some(id) = t.focus else { return };
             let Some(n) = t.node_mut(id) else { return };
+            if n.kind != NKind::Widget(Kind::Input) || n.flag(Attr::Disabled) {
+                return;
+            }
             f(&mut n.input);
             (id, n.input.clone())
         };
@@ -416,18 +527,30 @@ impl Ui {
     }
 
     fn slide(&self, id: usize, x: f32) {
+        self.set_slider(id, |n, _| {
+            let track = scene::slider_track(n, 0.0);
+            let (lo, hi) = (n.num(Attr::Min, 0.0), n.num(Attr::Max, 1.0));
+            lo + ((x - track.x) / track.width).clamp(0.0, 1.0) * (hi - lo)
+        });
+    }
+
+    fn set_slider(&self, id: usize, change: impl FnOnce(&tree::NNode, f32) -> f32) {
         let value = {
             let t = self.shared.tree.borrow();
             let Some(n) = t.node(id) else { return };
-            let track = scene::slider_track(n, 0.0);
             let (lo, hi) = (n.num(Attr::Min, 0.0), n.num(Attr::Max, 1.0));
+            if !n.focusable() || !lo.is_finite() || !hi.is_finite() || lo >= hi {
+                return;
+            }
             let step = n.num(Attr::Step, 0.0);
-            let frac = ((x - track.x) / track.width).clamp(0.0, 1.0);
-            let mut v = lo + frac * (hi - lo);
+            let mut v = change(n, if step > 0.0 { step } else { (hi - lo) / 100.0 });
+            if !v.is_finite() {
+                return;
+            }
             if step > 0.0 {
                 v = lo + ((v - lo) / step).round() * step;
             }
-            v
+            v.clamp(lo, hi)
         };
         if let Some((Handler::ChangedNum(f), v)) =
             self.handler(id, |h| matches!(h, Handler::ChangedNum(_)))

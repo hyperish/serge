@@ -1,4 +1,4 @@
-//! `serge-web-dev` — what `hyve-serge build --web` and `hyve-serge preview
+//! `serge-web-dev` — what `hyve-serge build --web` and `hyve-serge dev
 //! --web` do: build a serge app for the browser (`cargo` for
 //! `wasm32-unknown-unknown`, then `wasm-bindgen --target web`) into
 //! `target/serge/<package>/`, and serve it locally with SPA fallback, an API
@@ -10,10 +10,12 @@
 //! `[package.metadata.serge] web = true` in its manifest.
 
 mod bundle;
+mod production;
 mod server;
 mod workspace;
 
 pub use bundle::{BuildOptions, Bundle, build_web};
+pub use production::build_production;
 pub use server::{DevServer, Proxy, Reload};
 pub use workspace::{Package, Workspace};
 

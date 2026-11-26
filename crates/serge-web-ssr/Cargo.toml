@@ -1,0 +1,23 @@
+[package]
+name = "serge-web-ssr"
+description = "Production bundle, server rendering, and static HTML contracts for Serge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+base64.workspace = true
+bytes.workspace = true
+futures-core.workspace = true
+hyve.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serge-core.workspace = true
+serge-router.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

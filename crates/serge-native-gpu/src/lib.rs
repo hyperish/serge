@@ -8,6 +8,12 @@
 //! [`GpuRenderer::render`] draws offscreen and reads the frame back (tests,
 //! parity checks); [`GpuSurface`] presents to a window.
 
+#[cfg(all(feature = "camera", target_vendor = "apple"))]
+pub mod camera;
+#[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+mod metal;
+pub mod viewport;
+use serge_core::viewport::{Slot as ViewSlot, TextureKey};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -52,7 +58,7 @@ fn err(e: impl std::fmt::Display) -> GpuError {
 /// What the last frame took.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Stats {
-    /// Draw calls (0 for an empty scene, else 1).
+    /// Composite draw calls, split at external texture boundaries.
     pub draw_calls: u32,
     /// Instances drawn.
     pub instances: u32,
@@ -145,9 +151,12 @@ type DeviceErrors = Arc<Mutex<Option<String>>>;
 
 /// Draws scenes on a GPU device.
 pub struct GpuRenderer {
+    #[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+    metal: Option<metal::MetalBatch>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     adapter: String,
+    external: HashMap<TextureKey, wgpu::Texture>,
     shader: wgpu::ShaderModule,
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
@@ -251,6 +260,7 @@ struct Placed {
 struct Encoded {
     instances: Vec<u8>,
     paths: Vec<Placed>,
+    external: Vec<(u32, TextureKey)>,
     shelf: Shelf,
 }
 
@@ -259,12 +269,14 @@ impl Encoded {
         Encoded {
             instances: Vec::new(),
             paths: Vec::new(),
+            external: Vec::new(),
             shelf: Shelf::new(path_width, max_side),
         }
     }
 }
 
 /// Where a frame goes.
+#[derive(Clone, Copy)]
 struct Target<'a> {
     view: &'a wgpu::TextureView,
     format: wgpu::TextureFormat,
@@ -375,8 +387,11 @@ impl GpuRenderer {
             atlas_usage,
         );
         Ok(GpuRenderer {
+            #[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+            metal: metal::MetalBatch::new(&device)?,
             device,
             queue,
+            external: HashMap::new(),
             adapter: format!("{} ({:?})", info.name, info.backend),
             shader,
             layout,
@@ -404,6 +419,12 @@ impl GpuRenderer {
     /// What the last frame took.
     pub fn stats(&self) -> Stats {
         self.stats
+    }
+
+    /// Whether this renderer emits native Metal batches on the selected Apple device.
+    #[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+    pub fn uses_native_metal(&self) -> bool {
+        self.metal.is_some()
     }
 
     fn pipeline(&mut self, format: wgpu::TextureFormat) -> &wgpu::RenderPipeline {
@@ -521,12 +542,36 @@ impl GpuRenderer {
             instances: out,
             paths,
             shelf: path_shelf,
+            external,
         } = frame;
         let full = [0.0, 0.0, width as f32, height as f32];
         let mut clips = vec![full];
         for p in scene {
             let clip = *clips.last().unwrap_or(&full);
             match p {
+                ScenePrimitive::ExternalTexture { key, rect } => {
+                    let Some(slot) = ViewSlot::resolve(*key) else {
+                        continue;
+                    };
+                    let [x, y, w, h] = scaled(*rect, scale);
+                    if w <= 0.0 || h <= 0.0 {
+                        continue;
+                    }
+                    let (kind, color) = if self.external.contains_key(key) {
+                        external.push(((out.len() as u64 / INSTANCE_BYTES) as u32, *key));
+                        (5.0, [1.0; 4])
+                    } else {
+                        (FILL, rgba(slot.fallback()))
+                    };
+                    let [r, g, b, a] = color;
+                    push_f32s(
+                        out,
+                        [
+                            x, y, w, h, r, g, b, a, clip[0], clip[1], clip[2], clip[3], 0.0, 0.0,
+                            kind, 0.0,
+                        ],
+                    );
+                }
                 ScenePrimitive::Quad {
                     rect,
                     color,
@@ -705,7 +750,9 @@ impl GpuRenderer {
         target: Target<'_>,
         scale: f32,
         encoder: &mut wgpu::CommandEncoder,
-    ) {
+    ) -> Result<Vec<wgpu::CommandBuffer>, GpuError> {
+        #[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+        let metal_target = target;
         let Target {
             view: target,
             format,
@@ -715,6 +762,13 @@ impl GpuRenderer {
         self.stats = Stats::default();
         let max_side = self.device.limits().max_texture_dimension_2d;
         let path_width = 2048.min(max_side);
+        viewport::prepare(
+            &mut self.external,
+            &self.device,
+            &self.queue,
+            encoder,
+            scene,
+        );
         let mut frame = Encoded::new(path_width, max_side);
         if self
             .encode(scene, (width, height, scale), &mut frame)
@@ -739,6 +793,7 @@ impl GpuRenderer {
             instances: out,
             paths,
             shelf: path_shelf,
+            external,
         } = frame;
         // This frame's path masks.
         let need_h = path_shelf.used_height().max(1);
@@ -781,6 +836,22 @@ impl GpuRenderer {
             );
         }
         let count = (out.len() as u64 / INSTANCE_BYTES) as u32;
+        #[cfg(all(feature = "native-metal", target_vendor = "apple"))]
+        if let Some(metal) = &mut self.metal {
+            let scene = metal::Scene {
+                instances: &out,
+                glyphs: &self.glyph_atlas,
+                paths: &self.path_atlas,
+                viewports: &external,
+                textures: &self.external,
+            };
+            let (batch, calls) = metal.encode(&self.device, encoder, metal_target, scene)?;
+            self.stats.instances = count;
+            self.stats.draw_calls = calls;
+            let readback = self.device.create_command_encoder(&Default::default());
+            let prepared = std::mem::replace(encoder, readback);
+            return Ok(vec![prepared.finish(), batch]);
+        }
         if (out.len() as u64) > self.instances.size() {
             self.instances = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("serge instances"),
@@ -799,24 +870,34 @@ impl GpuRenderer {
         self.queue.write_buffer(&self.globals, 0, &globals);
         let glyph_view = self.glyph_atlas.create_view(&Default::default());
         let path_view = self.path_atlas.create_view(&Default::default());
-        let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("serge"),
-            layout: &self.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.globals.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&glyph_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&path_view),
-                },
-            ],
-        });
+        let group = |image: &wgpu::TextureView| {
+            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("serge"),
+                layout: &self.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.globals.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(image),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&path_view),
+                    },
+                ],
+            })
+        };
+        let bind = group(&glyph_view);
+        let viewport_groups: Vec<_> = external
+            .into_iter()
+            .map(|(index, key)| {
+                let image = self.external[&key].create_view(&Default::default());
+                (index, group(&image))
+            })
+            .collect();
         let pipeline = self.pipeline(format).clone();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("serge"),
@@ -833,12 +914,27 @@ impl GpuRenderer {
         });
         if count > 0 {
             pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &bind, &[]);
             pass.set_vertex_buffer(0, self.instances.slice(..));
-            pass.draw(0..4, 0..count);
-            self.stats.draw_calls = 1;
+            let mut start = 0;
+            for (index, group) in &viewport_groups {
+                if start < *index {
+                    pass.set_bind_group(0, &bind, &[]);
+                    pass.draw(0..4, start..*index);
+                    self.stats.draw_calls += 1;
+                }
+                pass.set_bind_group(0, group, &[]);
+                pass.draw(0..4, *index..*index + 1);
+                self.stats.draw_calls += 1;
+                start = *index + 1;
+            }
+            if start < count {
+                pass.set_bind_group(0, &bind, &[]);
+                pass.draw(0..4, start..count);
+                self.stats.draw_calls += 1;
+            }
         }
         self.stats.instances = count;
+        Ok(Vec::new())
     }
 
     fn check(&self) -> Result<(), GpuError> {
@@ -883,8 +979,8 @@ impl GpuRenderer {
             width: w,
             height: h,
         };
-        self.draw(scene, to, scale, &mut encoder);
-        let rgba = self.read_back(&target, encoder, false)?;
+        let batches = self.draw(scene, to, scale, &mut encoder)?;
+        let rgba = self.read_back(&target, batches, encoder, false)?;
         Ok(Frame {
             width: w as u16,
             height: h as u16,
@@ -896,6 +992,7 @@ impl GpuRenderer {
     fn read_back(
         &mut self,
         texture: &wgpu::Texture,
+        batches: Vec<wgpu::CommandBuffer>,
         mut encoder: wgpu::CommandEncoder,
         bgra: bool,
     ) -> Result<Vec<u8>, GpuError> {
@@ -925,7 +1022,8 @@ impl GpuRenderer {
                 depth_or_array_layers: 1,
             },
         );
-        self.queue.submit([encoder.finish()]);
+        self.queue
+            .submit(batches.into_iter().chain([encoder.finish()]));
         let slice = buffer.slice(..);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
@@ -983,6 +1081,16 @@ impl GpuSurface {
         width: u32,
         height: u32,
     ) -> Result<GpuSurface, GpuError> {
+        Self::with_software_adapter(target, width, height, true)
+    }
+
+    /// A window surface with an explicit policy for software Vulkan adapters.
+    pub fn with_software_adapter(
+        target: impl Into<wgpu::SurfaceTarget<'static>>,
+        width: u32,
+        height: u32,
+        allow_software: bool,
+    ) -> Result<GpuSurface, GpuError> {
         let instance = instance();
         let surface = instance
             .create_surface(target)
@@ -992,6 +1100,9 @@ impl GpuSurface {
             ..Default::default()
         }))
         .map_err(|e| GpuError(format!("no GPU adapter for the window: {e}")))?;
+        if !allow_software && adapter.get_info().device_type == wgpu::DeviceType::Cpu {
+            return Err(GpuError("platform only offers a software GPU".into()));
+        }
         let caps = surface.get_capabilities(&adapter);
         // Blend in sRGB-encoded values like the CPU path: a non-sRGB format,
         // or a non-sRGB view of an sRGB one.
@@ -1107,7 +1218,7 @@ impl GpuSurface {
             .renderer
             .device
             .create_command_encoder(&Default::default());
-        self.renderer.draw(
+        let batches = self.renderer.draw(
             scene,
             Target {
                 view: &view,
@@ -1117,17 +1228,21 @@ impl GpuSurface {
             },
             scale,
             &mut encoder,
-        );
+        )?;
         let pixels = if read_back && self.readable {
             let bgra = matches!(self.view_format, wgpu::TextureFormat::Bgra8Unorm);
-            let rgba = self.renderer.read_back(&frame.texture, encoder, bgra)?;
+            let rgba = self
+                .renderer
+                .read_back(&frame.texture, batches, encoder, bgra)?;
             Some(Frame {
                 width: w.min(u32::from(u16::MAX)) as u16,
                 height: h.min(u32::from(u16::MAX)) as u16,
                 rgba,
             })
         } else {
-            self.renderer.queue.submit([encoder.finish()]);
+            self.renderer
+                .queue
+                .submit(batches.into_iter().chain([encoder.finish()]));
             None
         };
         self.renderer.queue.present(frame);

@@ -120,6 +120,23 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// The DOM element and class used by the browser and server renderers.
+    pub fn html(self) -> (&'static str, &'static str) {
+        match self {
+            Kind::View => ("div", "serge-view"),
+            Kind::Stack => ("div", "serge-stack"),
+            Kind::Card => ("div", "serge-card"),
+            Kind::Text => ("div", "serge-text"),
+            Kind::Button => ("button", "serge-button"),
+            Kind::Slider => ("input", "serge-slider"),
+            Kind::Input => ("input", "serge-input"),
+            Kind::Checkbox => ("label", "serge-checkbox"),
+            Kind::Canvas => ("div", "serge-canvas"),
+            Kind::ProgressBar => ("div", "serge-progress"),
+            Kind::Link => ("a", "serge-link"),
+        }
+    }
+
     /// The style a widget of this kind starts from.
     pub fn base_style(self, theme: &Theme) -> Style {
         use serge_style::{Align, Length::Px};
@@ -331,6 +348,8 @@ pub enum Handler {
     Submitted(Rc<dyn Fn()>),
     /// `paint(bounds, ctx)` of a canvas.
     Paint(PaintFn),
+    /// An external producer mounted inside a canvas region.
+    Viewport(crate::viewport::Viewport),
 }
 
 /// The mouse cursor over a widget on native targets (`native::cursor`).

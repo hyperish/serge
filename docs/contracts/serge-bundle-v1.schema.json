@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SergeBundleManifest v1",
+  "type": "object",
+  "required": ["version", "buildId", "assets", "routes"],
+  "properties": {
+    "version": { "const": 1 },
+    "buildId": { "type": "string", "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$" },
+    "assets": { "type": "array", "items": { "$ref": "#/$defs/asset" } },
+    "routes": { "type": "array", "items": { "$ref": "#/$defs/route" } }
+  },
+  "$defs": {
+    "file": { "type": "string", "minLength": 1 },
+    "asset": {
+      "type": "object",
+      "required": ["url", "file", "mediaType", "bytes", "sha256"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^/assets/[0-9a-f]{64}/[A-Za-z0-9._~-]+$" },
+        "file": { "$ref": "#/$defs/file" },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "route": {
+      "type": "object",
+      "required": ["pattern", "mode"],
+      "properties": {
+        "pattern": { "type": "string", "pattern": "^/" },
+        "mode": { "enum": ["csr", "ssg", "ssr"] },
+        "file": { "$ref": "#/$defs/file" }
+      },
+      "if": { "properties": { "mode": { "const": "ssr" } } },
+      "then": { "not": { "required": ["file"] } },
+      "else": { "required": ["file"] }
+    }
+  }
+}

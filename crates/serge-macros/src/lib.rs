@@ -36,3 +36,67 @@ pub fn component(attr: TokenStream, item: TokenStream) -> TokenStream {
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
+
+fn widget(
+    platform: serge_widget_codegen::Platform,
+    attrs: TokenStream,
+    item: TokenStream,
+) -> TokenStream {
+    let generate = || -> syn::Result<proc_macro2::TokenStream> {
+        if !attrs.is_empty() {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "platform widget attributes take no options",
+            ));
+        }
+        let func = syn::parse::<syn::ItemFn>(item)?;
+        let widget = serge_widget_codegen::Widget::parse(platform, &func)?;
+        Ok(widget.rust_function(func))
+    };
+    generate()
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+/// Compiles a static WidgetKit live activity and a public state projection.
+#[proc_macro_attribute]
+pub fn live_activity(attrs: TokenStream, item: TokenStream) -> TokenStream {
+    widget(serge_widget_codegen::Platform::LiveActivity, attrs, item)
+}
+/// Compiles a static Jetpack Glance widget and a public state projection.
+#[proc_macro_attribute]
+pub fn glance_widget(attrs: TokenStream, item: TokenStream) -> TokenStream {
+    widget(serge_widget_codegen::Platform::Glance, attrs, item)
+}
+
+/// Generates a WidgetKit timeline widget and its App Intent.
+#[proc_macro_attribute]
+pub fn home_widget(attrs: TokenStream, item: TokenStream) -> TokenStream {
+    widget(serge_widget_codegen::Platform::WidgetKit, attrs, item)
+}
+/// Generates an Android system notification from a static presentation.
+#[proc_macro_attribute]
+pub fn ongoing_notification(attrs: TokenStream, item: TokenStream) -> TokenStream {
+    widget(serge_widget_codegen::Platform::Ongoing, attrs, item)
+}
+
+/// Marks a capture-free `fn() -> u32` render calculation. The body may only
+/// contain unsigned literals and arithmetic or bitwise operators. In a normal
+/// build this is an ordinary function.
+#[proc_macro_attribute]
+pub fn render_value(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let mut f = syn::parse_macro_input!(item as syn::ItemFn);
+    if !args.is_empty() {
+        return syn::Error::new(f.sig.ident.span(), "render_value takes no arguments")
+            .into_compile_error()
+            .into();
+    }
+    if let Err(e) = serge_widget_codegen::render_value::check(&f) {
+        return e.into_compile_error().into();
+    }
+    let body = f.block;
+    f.block = Box::new(syn::parse_quote!({ ::serge::__render_value(|| #body) }));
+    quote::quote!(#f).into()
+}

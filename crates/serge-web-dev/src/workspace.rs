@@ -10,6 +10,8 @@ use crate::Error;
 /// A workspace package.
 #[derive(Clone, Debug)]
 pub struct Package {
+    /// Production export settings from the package manifest.
+    pub delivery: serde_json::Value,
     /// The package name.
     pub name: String,
     /// Its directory.
@@ -72,6 +74,7 @@ impl Workspace {
                         .any(|k| k == "lib" || k == "cdylib" || k == "rlib")
                 });
                 Package {
+                    delivery: p["metadata"]["serge"].clone(),
                     name: s(&p["name"]),
                     dir: PathBuf::from(s(&p["manifest_path"]))
                         .parent()

@@ -34,6 +34,7 @@ pub(crate) struct CanvasState {
 }
 
 pub(crate) struct NNode {
+    pub access_id: accesskit::NodeId,
     pub kind: NKind,
     pub style: Style,
     pub attrs: Vec<(Attr, AttrValue)>,
@@ -46,10 +47,21 @@ pub(crate) struct NNode {
     pub view: View,
     /// An input's text.
     pub input: String,
+    pub viewport: Option<serge_core::viewport::Slot>,
     pub canvas: Option<CanvasState>,
 }
 
 impl NNode {
+    pub fn focusable(&self) -> bool {
+        if self.viewport.is_some() {
+            return true;
+        }
+        matches!(
+            self.kind,
+            NKind::Widget(Kind::Button | Kind::Slider | Kind::Input | Kind::Checkbox | Kind::Link)
+        ) && !self.flag(Attr::Disabled)
+    }
+
     pub fn attr(&self, a: Attr) -> Option<&AttrValue> {
         self.attrs.iter().find(|(k, _)| *k == a).map(|(_, v)| v)
     }
@@ -81,6 +93,7 @@ impl NNode {
 pub(crate) struct Tree {
     pub nodes: Vec<Option<NNode>>,
     free: Vec<usize>,
+    next_access_id: u64,
     pub root: usize,
     pub dirty: bool,
     pub focus: Option<usize>,
@@ -90,6 +103,8 @@ pub(crate) struct Tree {
     pub scroll_y: f32,
     pub content_height: f32,
     pub size: (f32, f32),
+    pub scale: f32,
+    pub origin: (f32, f32),
 }
 
 impl Tree {
@@ -97,6 +112,7 @@ impl Tree {
         let mut t = Tree {
             nodes: Vec::new(),
             free: Vec::new(),
+            next_access_id: 1,
             root: 0,
             dirty: true,
             focus: None,
@@ -106,6 +122,8 @@ impl Tree {
             scroll_y: 0.0,
             content_height: 0.0,
             size: (0.0, 0.0),
+            scale: 1.0,
+            origin: (0.0, 0.0),
         };
         t.root = t.alloc(NKind::Root, None, root_view);
         t
@@ -120,7 +138,13 @@ impl Tree {
     }
 
     fn alloc(&mut self, kind: NKind, parent: Option<usize>, view: View) -> usize {
+        let access_id = accesskit::NodeId(self.next_access_id);
+        self.next_access_id = self
+            .next_access_id
+            .checked_add(1)
+            .expect("native accessibility IDs exhausted");
         let node = NNode {
+            access_id,
             kind,
             style: Style::default(),
             attrs: Vec::new(),
@@ -132,6 +156,7 @@ impl Tree {
             view,
             input: String::new(),
             canvas: None,
+            viewport: None,
         };
         let id = match self.free.pop() {
             Some(id) => {
@@ -320,6 +345,13 @@ fn mount_widget(ui: &Rc<Shared>, w: Widget, parent: usize, view: &View) {
     let id = ui.with(|t| {
         let id = t.alloc(NKind::Widget(kind), Some(parent), view.clone());
         let n = t.node_mut(id).expect("just allocated");
+        n.viewport = handlers.iter().find_map(|h| {
+            if let Handler::Viewport(v) = h {
+                Some(v.mount())
+            } else {
+                None
+            }
+        });
         n.handlers = handlers;
         n.cursor = cursor;
         id
@@ -359,6 +391,14 @@ fn mount_widget(ui: &Rc<Shared>, w: Widget, parent: usize, view: &View) {
                         ui.with(|t| {
                             if let Some(n) = t.node_mut(id) {
                                 n.set_attr(a, value);
+                                if a == Attr::Disabled && n.flag(a) {
+                                    if t.focus == Some(id) {
+                                        t.focus = None;
+                                    }
+                                    if t.drag == Some(id) {
+                                        t.drag = None;
+                                    }
+                                }
                             }
                         });
                     })

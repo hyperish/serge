@@ -3,6 +3,7 @@
 //! required fallback when no GPU device can be created, and what headless
 //! tests and CI snapshot (`docs/03-adapters-and-pipeline.md` §1.2).
 
+mod target;
 use serge_core::{Point, Rect, ScenePrimitive};
 use serge_native_text::Font;
 use serge_style::Color;
@@ -11,6 +12,24 @@ use vello_cpu::kurbo::{self, Affine, BezPath, Shape, Stroke};
 use vello_cpu::peniko::Fill;
 use vello_cpu::peniko::color::{AlphaColor, Srgb};
 use vello_cpu::{Glyph, Pixmap, RenderContext, Resources};
+
+// Vello writes premultiplied RGBA directly into the allocation returned to the caller.
+fn raster_rgba(ctx: &mut RenderContext, resources: &mut Resources, background: Color) -> Vec<u8> {
+    let (width, height) = (ctx.width(), ctx.height());
+    let pixels = usize::from(width) * usize::from(height);
+    let mut rgba = vec![0; pixels.checked_mul(4).expect("frame exceeds address space")];
+    let view = vello_cpu::PixmapMut::new(width, height, &mut rgba).expect("exact frame length");
+    ctx.flush();
+    ctx.render_with(
+        view,
+        resources,
+        vello_cpu::RasterizerSettings {
+            target_init: vello_cpu::TargetInit::Clear(color(background)),
+            ..Default::default()
+        },
+    );
+    rgba
+}
 
 /// A rendered frame: premultiplied RGBA8, row-major.
 #[derive(Clone, Debug, PartialEq)]
@@ -140,6 +159,11 @@ impl CpuRenderer {
         scale: f32,
     ) -> Frame {
         let (width, height) = (width.max(1), height.max(1));
+        let (background, scene) = target::background(scene, width, height, scale);
+        if scene.is_empty() {
+            self.ctx.reset();
+            return target::solid(width, height, background);
+        }
         if self.ctx.width() != width || self.ctx.height() != height {
             self.ctx = RenderContext::new(width, height);
         } else {
@@ -150,6 +174,41 @@ impl CpuRenderer {
         ctx.set_transform(base);
         for p in scene {
             match p {
+                ScenePrimitive::ExternalTexture { key, rect: dest } => {
+                    let Some(slot) = serge_core::viewport::Slot::resolve(*key) else {
+                        continue;
+                    };
+                    let size = slot.extent();
+                    if size.byte_len().is_none() {
+                        continue;
+                    }
+                    if let (Ok(w), Ok(h), Some(bytes)) = (
+                        u16::try_from(size.width),
+                        u16::try_from(size.height),
+                        slot.rgba(),
+                    ) {
+                        let mut image = Pixmap::new(w, h);
+                        image.data_as_u8_slice_mut().copy_from_slice(&bytes);
+                        ctx.set_paint(vello_cpu::Image {
+                            image: vello_cpu::ImageSource::Pixmap(std::sync::Arc::new(image)),
+                            sampler: Default::default(),
+                        });
+                        ctx.set_paint_transform(
+                            Affine::translate((f64::from(dest.x), f64::from(dest.y)))
+                                * Affine::scale_non_uniform(
+                                    f64::from(dest.width) / f64::from(w),
+                                    f64::from(dest.height) / f64::from(h),
+                                ),
+                        );
+                        ctx.fill_rect(&rect(*dest));
+                        ctx.reset_paint_transform();
+                        slot.presented(true);
+                    } else {
+                        ctx.set_paint(color(slot.fallback()));
+                        ctx.fill_rect(&rect(*dest));
+                        slot.presented(false);
+                    }
+                }
                 ScenePrimitive::Quad {
                     rect: r,
                     color: c,
@@ -221,14 +280,7 @@ impl CpuRenderer {
                 ScenePrimitive::PopClip => ctx.pop_layer(),
             }
         }
-        ctx.flush();
-        let mut pixmap = Pixmap::new(width, height);
-        ctx.render(&mut pixmap, &mut self.resources);
-        let rgba = pixmap
-            .data()
-            .iter()
-            .flat_map(|p| [p.r, p.g, p.b, p.a])
-            .collect();
+        let rgba = raster_rgba(ctx, &mut self.resources, background);
         Frame {
             width,
             height,
@@ -315,19 +367,13 @@ impl MaskRasterizer {
         self.ctx
             .set_paint(AlphaColor::<Srgb>::from_rgba8(255, 255, 255, 255));
         f(&mut self.ctx, &mut self.resources);
-        self.ctx.flush();
-        let mut pixmap = Pixmap::new(width, height);
-        self.ctx.render(&mut pixmap, &mut self.resources);
+        let rgba = raster_rgba(&mut self.ctx, &mut self.resources, Color::TRANSPARENT);
         Mask {
             x,
             y,
             width,
             height,
-            rgba: pixmap
-                .data()
-                .iter()
-                .flat_map(|p| [p.r, p.g, p.b, p.a])
-                .collect(),
+            rgba,
         }
     }
 
@@ -436,4 +482,70 @@ fn crop(m: Mask) -> Option<Mask> {
         height: ch as u16,
         rgba,
     })
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    fn context() -> (RenderContext, Resources) {
+        let mut ctx = RenderContext::new(511, 251);
+        ctx.set_paint(AlphaColor::<Srgb>::from_rgba8(55, 123, 199, 101));
+        ctx.fill_rect(&kurbo::Rect::new(8.5, 10.0, 309.25, 180.5));
+        (ctx, Resources::new())
+    }
+
+    fn reference(ctx: &mut RenderContext, resources: &mut Resources) -> Vec<u8> {
+        ctx.flush();
+        let mut pixmap = Pixmap::new(ctx.width(), ctx.height());
+        ctx.render(&mut pixmap, resources);
+        pixmap
+            .data()
+            .iter()
+            .flat_map(|p| [p.r, p.g, p.b, p.a])
+            .collect()
+    }
+
+    #[test]
+    fn caller_owned_rgba_matches_vello_at_transparent_edges() {
+        let (mut ctx, mut resources) = context();
+        let expected = reference(&mut ctx, &mut resources);
+        let frame = raster_rgba(&mut ctx, &mut resources, Color::TRANSPARENT);
+        assert!(
+            frame
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|p| (1..101).contains(&p[3]))
+        );
+        assert_eq!(frame, expected);
+    }
+
+    #[test]
+    #[ignore = "timing comparison, run with --release --ignored --nocapture"]
+    fn benchmark_frame_buffer() {
+        let (mut ctx, mut resources) = context();
+        let mut samples = [Vec::new(), Vec::new()];
+        for trial in 0..21 {
+            for index in [trial % 2, 1 - trial % 2] {
+                let start = std::time::Instant::now();
+                for _ in 0..50 {
+                    let frame = if index == 0 {
+                        raster_rgba(&mut ctx, &mut resources, Color::TRANSPARENT)
+                    } else {
+                        reference(&mut ctx, &mut resources)
+                    };
+                    std::hint::black_box(frame);
+                }
+                samples[index].push(start.elapsed().as_nanos() / 50);
+            }
+        }
+        for (name, mut times) in ["borrowed RGBA", "owned Pixmap"].into_iter().zip(samples) {
+            times.sort_unstable();
+            println!(
+                "{name}: {} ns/frame ({}–{})",
+                times[10], times[0], times[20]
+            );
+        }
+    }
 }

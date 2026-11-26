@@ -71,28 +71,84 @@ impl Reload {
 pub struct DevServer {
     addr: SocketAddr,
     reload: Reload,
+    files: Arc<Mutex<Arc<Files>>>,
+}
+
+#[derive(Debug)]
+enum Files {
+    Directory(PathBuf),
+    Build(tempfile::TempDir),
+}
+
+impl Files {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Directory(dir) => dir,
+            Self::Build(dir) => dir.path(),
+        }
+    }
 }
 
 impl DevServer {
     /// Serves `dir` on `addr` (port 0 picks one) in background threads.
     pub fn start(addr: &str, dir: PathBuf, proxy: Option<Proxy>) -> std::io::Result<DevServer> {
-        let listener = TcpListener::bind(addr)?;
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut key = DefaultHasher::new();
+        dir.canonicalize()?.hash(&mut key);
+        Self::listen(
+            TcpListener::bind(addr)?,
+            Files::Directory(dir),
+            proxy,
+            key.finish(),
+        )
+    }
+
+    /// Serves a finished development build. The namespace identifies the
+    /// workspace and app even when the output directory changes on rebuild.
+    pub fn development(
+        listener: TcpListener,
+        build: tempfile::TempDir,
+        proxy: Option<Proxy>,
+        namespace: u64,
+    ) -> std::io::Result<Self> {
+        Self::listen(listener, Files::Build(build), proxy, namespace)
+    }
+
+    fn listen(
+        listener: TcpListener,
+        initial: Files,
+        proxy: Option<Proxy>,
+        namespace: u64,
+    ) -> std::io::Result<Self> {
         let addr = listener.local_addr()?;
         let reload = Reload::default();
         let r = reload.clone();
-        let dir = Arc::new(dir);
+        let files = Arc::new(Mutex::new(Arc::new(initial)));
+        let current = files.clone();
         let proxy = Arc::new(proxy);
         std::thread::Builder::new()
             .name("serge-dev-server".into())
             .spawn(move || {
                 for stream in listener.incoming().flatten() {
-                    let (dir, proxy, r) = (dir.clone(), proxy.clone(), r.clone());
+                    let dir = current.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                    let (proxy, r) = (proxy.clone(), r.clone());
                     std::thread::spawn(move || {
-                        let _ = handle(stream, &dir, proxy.as_ref().as_ref(), &r);
+                        let _ = handle(stream, dir.path(), proxy.as_ref().as_ref(), &r, namespace);
                     });
                 }
             })?;
-        Ok(DevServer { addr, reload })
+        Ok(DevServer {
+            addr,
+            reload,
+            files,
+        })
+    }
+
+    /// Activates one successful build. Readers of the previous directory keep
+    /// it alive until their response completes.
+    pub fn replace(&self, build: tempfile::TempDir) {
+        *self.files.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(Files::Build(build));
+        self.reload.reload();
     }
 
     /// The bound address.
@@ -194,12 +250,14 @@ fn file_for(dir: &Path, url_path: &str) -> Option<PathBuf> {
     out.is_file().then_some(out)
 }
 
-fn serve_index(s: &TcpStream, dir: &Path) -> std::io::Result<()> {
+fn serve_index(s: &TcpStream, dir: &Path, namespace: u64) -> std::io::Result<()> {
     match std::fs::read_to_string(dir.join("index.html")) {
         Ok(html) => {
+            let marker =
+                format!(r#"<meta name="serge-dev-session" content="dev-{namespace:016x}">"#);
             let html = match html.rfind("</body>") {
-                Some(i) => format!("{}{RELOAD_SCRIPT}\n{}", &html[..i], &html[i..]),
-                None => format!("{html}{RELOAD_SCRIPT}"),
+                Some(i) => format!("{}{marker}{RELOAD_SCRIPT}\n{}", &html[..i], &html[i..]),
+                None => format!("{html}{marker}{RELOAD_SCRIPT}"),
             };
             respond(s, "200 OK", "text/html; charset=utf-8", html.as_bytes())
         }
@@ -217,6 +275,7 @@ fn handle(
     dir: &Path,
     proxy: Option<&Proxy>,
     reload: &Reload,
+    namespace: u64,
 ) -> std::io::Result<()> {
     stream.set_read_timeout(Some(Duration::from_secs(30)))?;
     let req = read_request(&stream)?;
@@ -237,7 +296,7 @@ fn handle(
         return respond(&stream, "405 Method Not Allowed", "text/plain", b"");
     }
     if path == "/" || path == "/index.html" {
-        return serve_index(&stream, dir);
+        return serve_index(&stream, dir, namespace);
     }
     match file_for(dir, &path) {
         Some(f) => {
@@ -249,7 +308,7 @@ fn handle(
         None if Path::new(&path).extension().is_some() => {
             respond(&stream, "404 Not Found", "text/plain", b"not found")
         }
-        None => serve_index(&stream, dir),
+        None => serve_index(&stream, dir, namespace),
     }
 }
 

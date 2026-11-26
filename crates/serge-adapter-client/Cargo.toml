@@ -8,11 +8,26 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+ipc = ["hyve/ipc"]
+shm = ["hyve/shm"]
+realtime = ["dep:url", "dep:wtransport", "dep:tokio-tungstenite", "dep:tokio-util", "dep:futures-util", "dep:futures-channel"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "=0.6.1", features = ["native-activity"] }
+jni = "=0.22.4"
+
 [dependencies]
+futures-util = { workspace = true, optional = true, features = ["sink"] }
+futures-channel = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
 hyve.workspace = true
 serge-core.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wtransport = { workspace = true, optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true, features = ["codec"] }
 bytes.workspace = true
 http.workspace = true
 http-body-util.workspace = true

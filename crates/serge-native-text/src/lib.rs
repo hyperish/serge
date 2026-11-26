@@ -9,6 +9,8 @@ use fontique as _;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod glyph_run;
+
 use parley::{FontContext, FontWeight, LayoutContext, PositionedLayoutItem, StyleProperty};
 use serge_core::{FontHandle, Glyph, Point, ScenePrimitive};
 use serge_style::Color;
@@ -57,7 +59,6 @@ impl TextLayout {
 
 #[derive(Hash, PartialEq, Eq, Clone)]
 struct Key {
-    text: String,
     size: u32,
     weight: u16,
     max_width: Option<u32>,
@@ -67,7 +68,8 @@ struct Key {
 pub struct TextSystem {
     fonts: FontContext,
     layouts: LayoutContext<()>,
-    cache: HashMap<Key, TextLayout>,
+    cache: HashMap<Box<str>, HashMap<Key, TextLayout>>,
+    cached_layouts: usize,
     handles: HashMap<(u64, u32), FontHandle>,
 }
 
@@ -90,6 +92,7 @@ impl TextSystem {
             fonts: FontContext::new(),
             layouts: LayoutContext::new(),
             cache: HashMap::new(),
+            cached_layouts: 0,
             handles: HashMap::new(),
         }
     }
@@ -102,17 +105,34 @@ impl TextSystem {
         weight: u16,
         max_width: Option<f32>,
     ) -> TextLayout {
+        self.layout_ref(text, size, weight, max_width).clone()
+    }
+
+    /// Borrows the shaped paragraph until the next mutable access to the text system.
+    pub fn layout_ref(
+        &mut self,
+        text: &str,
+        size: f32,
+        weight: u16,
+        max_width: Option<f32>,
+    ) -> &TextLayout {
+        // Key on the actual line-breaking width, including its half-pixel rounding allowance.
+        let wrap = max_width.map(|w| (w.max(1.0) + 0.5).ceil());
         let key = Key {
-            text: text.to_owned(),
             size: size.to_bits(),
             weight,
-            max_width: max_width.map(|w| w.max(0.0).ceil() as u32),
+            max_width: wrap.map(f32::to_bits),
         };
-        if let Some(l) = self.cache.get(&key) {
-            return l.clone();
+        if self
+            .cache
+            .get(text)
+            .is_some_and(|styles| styles.contains_key(&key))
+        {
+            return &self.cache[text][&key];
         }
-        if self.cache.len() > 2048 {
+        if self.cached_layouts >= 2048 {
             self.cache.clear();
+            self.cached_layouts = 0;
         }
         let mut b = self
             .layouts
@@ -126,9 +146,7 @@ impl TextSystem {
             parley::LineHeight::FontSizeRelative(1.25),
         ));
         let mut layout: parley::Layout<()> = b.build(text);
-        // Half a pixel of slack: a box sized to a measured (rounded-up)
-        // width must not wrap its own text.
-        layout.break_all_lines(max_width.map(|w| (w.max(1.0) + 0.5).ceil()));
+        layout.break_all_lines(wrap);
         let mut runs = Vec::new();
         for line in layout.lines() {
             for item in line.items() {
@@ -143,14 +161,7 @@ impl TextSystem {
                     runs.push(Run {
                         font: handle,
                         size: run.font_size(),
-                        glyphs: g
-                            .positioned_glyphs()
-                            .map(|p| Glyph {
-                                id: p.id,
-                                x: p.x,
-                                y: p.y,
-                            })
-                            .collect(),
+                        glyphs: glyph_run::positioned(&g),
                     });
                 }
             }
@@ -160,8 +171,12 @@ impl TextSystem {
             height: layout.height().max(size * 1.2),
             runs,
         };
-        self.cache.insert(key, out.clone());
-        out
+        self.cached_layouts += 1;
+        self.cache
+            .entry(text.into())
+            .or_default()
+            .entry(key)
+            .or_insert(out)
     }
 
     /// The size of `text` (wrapped at `max_width` when given).
@@ -172,7 +187,7 @@ impl TextSystem {
         weight: u16,
         max_width: Option<f32>,
     ) -> (f32, f32) {
-        let l = self.layout(text, size, weight, max_width);
+        let l = self.layout_ref(text, size, weight, max_width);
         (l.width.ceil(), l.height.ceil())
     }
 }

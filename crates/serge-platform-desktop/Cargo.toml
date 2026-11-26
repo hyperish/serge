@@ -8,7 +8,46 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+serge-native-hotpatch = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { workspace = true, features = ["android-native-activity"] }
+accesskit_android = { version = "=0.9.1", features = ["embedded-dex"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "=0.5.3"
+objc2-ui-kit = { version = "=0.2.2", default-features = false, features = ["UIView","UIResponder","UIGeometry","UIKeyboardLayoutGuide","UITrackingLayoutGuide","UILayoutGuide"] }
+
+[target.'cfg(target_os="linux")'.dependencies]
+serge-adapter-webview = {workspace=true,optional=true,features=["native-host"]}
+zbus = { version = "=5.19.0", optional = true }
+gtk = { version = "=0.19.0", optional = true }
+gdkx11 = { version = "=0.19.0", optional = true }
+
+[target.'cfg(target_os="windows")'.dependencies]
+windows = { version = "=0.62.2", optional = true, features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os="macos")'.dependencies]
+objc2 = { version = "=0.6.5", optional = true }
+objc2-foundation = { version = "=0.3.2", optional = true, default-features = false, features = ["std", "NSString", "NSGeometry"] }
+objc2-app-kit = { version = "=0.3.2", optional = true, default-features = false, features = ["std", "NSApplication", "NSResponder", "NSDockTile", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSViewController", "NSPopover"] }
+
+[features]
+webview=["dep:serge-adapter-webview", "dep:gtk"]
+hotpatch = ["dep:serge-native-hotpatch"]
+system = ["dep:tray-icon", "dep:global-hotkey", "dep:crossbeam-channel", "dep:zbus", "dep:gtk", "dep:gdkx11", "dep:windows", "dep:objc2", "dep:objc2-foundation", "dep:objc2-app-kit"]
+
+[target.'cfg(any(target_os = "macos",target_os = "windows",target_os = "linux"))'.dependencies]
+tray-icon = { workspace = true, optional = true }
+global-hotkey = { version = "=0.10.0", optional = true }
+crossbeam-channel = { version = "0.5", optional = true }
+
 [dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+accesskit_winit.workspace = true
 hyve.workspace = true
 serge-core.workspace = true
 serge-native.workspace = true

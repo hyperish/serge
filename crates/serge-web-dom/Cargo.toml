@@ -8,7 +8,11 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+ionic = ["dep:serge-web-ionic"]
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+serge-web-ionic = { workspace = true, optional = true }
 hyve.workspace = true
 js-sys.workspace = true
 serge-core.workspace = true
@@ -20,9 +24,13 @@ web-sys = { workspace = true, features = [
     "AddEventListenerOptions", "CanvasRenderingContext2d", "Comment", "MediaQueryList", "console", "CssStyleDeclaration", "Document",
     "DomRect", "Element", "Event", "EventTarget", "History", "HtmlAnchorElement",
     "HtmlButtonElement", "HtmlCanvasElement", "HtmlElement", "HtmlHeadElement",
-    "HtmlInputElement", "HtmlStyleElement", "KeyboardEvent", "Location", "MouseEvent", "Node",
-    "ResizeObserver", "ResizeObserverEntry", "Text", "Window",
+    "ImageData", "HtmlInputElement", "HtmlStyleElement", "KeyboardEvent", "Location", "MouseEvent", "Node",
+    "NodeList", "ResizeObserver", "ResizeObserverEntry", "Text", "Window",
 ] }
 
 [lints]
 workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+web-sys = {workspace=true,features=["Performance"]}

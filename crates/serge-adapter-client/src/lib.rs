@@ -14,6 +14,11 @@
 //!   engine thread pushes into and a `Canvas` paint reads; reading it in
 //!   `paint` repaints on new data.
 
+#[cfg(feature = "realtime")]
+pub mod realtime;
+
+#[cfg(target_os = "android")]
+pub mod android;
 mod ring;
 
 use std::future::{Future, poll_fn};
@@ -54,7 +59,13 @@ mod native {
     #[derive(Clone)]
     pub(crate) enum Client {
         Plain(Legacy<HttpConnector>),
-        Tls(Legacy<hyper_rustls::HttpsConnector<HttpConnector>>),
+        #[cfg(all(feature = "ipc", any(unix, windows)))]
+        Local(std::path::PathBuf),
+        Tls {
+            client: Legacy<hyper_rustls::HttpsConnector<HttpConnector>>,
+            #[cfg(target_os = "android")]
+            platform_roots: bool,
+        },
         /// TLS could not be set up; every call fails with this.
         Broken(String),
     }
@@ -71,15 +82,17 @@ mod native {
     /// roots; without them the operating system verifies the server.
     pub(crate) fn tls(roots: Option<&str>) -> Client {
         match config(roots) {
-            Ok(config) => Client::Tls(
-                builder().build(
+            Ok(config) => Client::Tls {
+                #[cfg(target_os = "android")]
+                platform_roots: roots.is_none(),
+                client: builder().build(
                     hyper_rustls::HttpsConnectorBuilder::new()
                         .with_tls_config(config)
                         .https_only()
                         .enable_http1()
                         .build(),
                 ),
-            ),
+            },
             Err(e) => Client::Broken(e),
         }
     }
@@ -187,6 +200,17 @@ impl RemoteTransport {
             #[cfg(not(target_arch = "wasm32"))]
             client,
         }
+    }
+
+    /// Calls the same server functions on a same-user local socket or named pipe.
+    /// The fast rail, guard credentials, cancellation and schema fallback use
+    /// the same request contract as remote calls.
+    #[cfg(all(feature = "ipc", any(unix, windows), not(target_arch = "wasm32")))]
+    pub fn local(path: impl Into<std::path::PathBuf>, prefix: &str) -> Self {
+        let mut transport = Self::new("http://localhost");
+        transport.client = native::Client::Local(path.into());
+        transport.prefix = prefix.trim_end_matches('/').to_owned();
+        transport
     }
 
     /// Trusts exactly the CA certificates in `pem` (PEM text, one or more)
@@ -337,12 +361,43 @@ impl RemoteTransport {
         // The I/O runs on serge's runtime; the guard aborts it when this
         // future is dropped (the view unmounted) or cancelled.
         let task = serge_core::runtime().spawn(async move {
+            #[cfg(all(feature = "ipc", any(unix, windows)))]
+            let mut connection = None;
             let r = match &client {
-                native::Client::Plain(c) => c.request(request).await,
-                native::Client::Tls(c) => c.request(request).await,
+                #[cfg(all(feature = "ipc", any(unix, windows)))]
+                native::Client::Local(path) => {
+                    let stream = hyve::ipc::connect(path).await.map_err(|e| e.to_string())?;
+                    let (mut sender, driver) =
+                        hyper::client::conn::http1::handshake(hyper_util::rt::TokioIo::new(stream))
+                            .await
+                            .map_err(|e| native::chain(&e))?;
+                    connection = Some(Abort(tokio::spawn(driver).abort_handle()));
+                    let mut request = request;
+                    let path = request
+                        .uri()
+                        .path_and_query()
+                        .cloned()
+                        .unwrap_or_else(|| http::uri::PathAndQuery::from_static("/"));
+                    *request.uri_mut() = http::Uri::from(path);
+                    request.headers_mut().insert(
+                        http::header::HOST,
+                        http::HeaderValue::from_static("localhost"),
+                    );
+                    sender
+                        .send_request(request)
+                        .await
+                        .map_err(|e| native::chain(&e))?
+                }
+                native::Client::Plain(c) => {
+                    c.request(request).await.map_err(|e| native::chain(&e))?
+                }
+                native::Client::Tls { client:c, #[cfg(target_os="android")] platform_roots } => {
+                    #[cfg(target_os="android")]
+                    if *platform_roots && !android::ready() { return Err("initialize the Android certificate verifier before making an HTTPS request".into()); }
+                    c.request(request).await.map_err(|e| native::chain(&e))?
+                }
                 native::Client::Broken(e) => return Err(e.clone()),
-            }
-            .map_err(|e| native::chain(&e))?;
+            };
             let status = r.status().as_u16();
             let content_type = r
                 .headers()
@@ -357,6 +412,8 @@ impl RemoteTransport {
                 .map_err(|e| e.to_string())?
                 .to_bytes()
                 .to_vec();
+            #[cfg(all(feature = "ipc", any(unix, windows)))]
+            drop(connection);
             Ok::<_, String>(Answer {
                 status,
                 content_type,

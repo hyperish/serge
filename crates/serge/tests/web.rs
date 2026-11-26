@@ -68,10 +68,13 @@ fn the_counter_counts_in_the_dom() {
     let c = container();
     let m = mount(&c, Scope::root(), || ui! { CounterCard {} });
     assert_eq!(texts(&c, ".serge-text"), ["Count: 0"]);
+    let label = c.query_selector(".serge-text").unwrap().unwrap();
+    let text_node = label.first_child().unwrap();
     let b = find(&c, ".serge-button", "Increment");
     b.click();
     b.click();
     assert_eq!(texts(&c, ".serge-text"), ["Count: 2"]);
+    assert!(text_node.is_same_node(label.first_child().as_ref()));
     // Real elements with the card's style.
     let card: HtmlElement = c
         .query_selector(".serge-card")
@@ -235,12 +238,19 @@ async fn sliders_drive_text_and_canvas_paint() {
     let c = container();
     let _m = mount(&c, Scope::root(), || ui! { Exposure {} });
     assert_eq!(texts(&c, ".serge-text"), ["Exposure: 0.00"]);
-    sleep(50).await; // the canvas is sized by a ResizeObserver
     let canvas: web_sys::HtmlCanvasElement = c
         .query_selector("canvas")
         .unwrap()
         .unwrap()
         .unchecked_into();
+    // Wait for the first ResizeObserver paint, including on a software GPU.
+    for _ in 0..60 {
+        let (w, h) = (f64::from(canvas.width()), f64::from(canvas.height()));
+        if w > 0.0 && h > 0.0 && pixel(&canvas, w * 0.25, h * 0.5) == [0x3b, 0x5b, 0xdb, 255] {
+            break;
+        }
+        sleep(16).await;
+    }
     assert!(canvas.width() > 0, "sized");
     let w = f64::from(canvas.width());
     let y = f64::from(canvas.height()) / 2.0;
@@ -495,4 +505,195 @@ fn per_instance_values_are_not_baked() {
     assert!(style(0).contains("padding: 2px"), "{}", style(0));
     assert!(style(1).contains("padding: 30px"), "{}", style(1));
     assert_eq!(texts(&root, ".serge-text"), ["small", "large"]);
+}
+
+#[cfg(feature = "ionic")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+export function adaptiveFixture() {
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'width:960px;height:480px;border:0';
+    document.body.append(frame);
+    const root = frame.contentDocument.createElement('div');
+    frame.contentDocument.body.append(root);
+    return root;
+}
+export function layoutOf(root) {
+    const win = root.ownerDocument.defaultView;
+    return win.getComputedStyle(root.querySelector('.serge-ionic-shell')).gridTemplateAreas;
+}
+export function resizeRoot(root) { root.ownerDocument.defaultView.frameElement.style.width='390px'; }
+export function keyIn(root, key, shift) {
+    const win = root.ownerDocument.defaultView;
+    root.ownerDocument.activeElement.dispatchEvent(new win.KeyboardEvent('keydown',{key,shiftKey:shift,bubbles:true,cancelable:true}));
+}
+export function swipe(root) {
+    const win=root.ownerDocument.defaultView, el=root.querySelector('.serge-ionic-grip');
+    for (const [name,y] of [['pointerdown',12],['pointerup',100]]) {
+        el.dispatchEvent(new win.PointerEvent(name,{isPrimary:true,pointerId:4,clientX:80,clientY:y,bubbles:true}));
+    }
+}
+export function removeFrame(root) { root.ownerDocument.defaultView.frameElement.remove(); }
+"#)]
+extern "C" {
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=adaptiveFixture)]
+    fn adaptive_fixture() -> DomElement;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=layoutOf)]
+    fn layout_of(root: &DomElement) -> String;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=resizeRoot)]
+    fn resize_root(root: &DomElement);
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=keyIn)]
+    fn key_in(root: &DomElement, key: &str, shift: bool);
+    fn swipe(root: &DomElement);
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=removeFrame)]
+    fn remove_frame(root: &DomElement);
+}
+
+#[cfg(feature = "ionic")]
+#[wasm_bindgen_test(async)]
+async fn adaptive_navigation_and_sheet_preserve_dom_focus_and_actions() {
+    let root = adaptive_fixture();
+    let mounted = mount(&root, Scope::root(), || {
+        let open = signal(false);
+        serge::ionic::shell(
+            ui! {Text{"Notes"}},
+            ui! {View{
+                Button{text:"Edit", clicked=>{open.set(true);}}
+                if open.get() { {serge::ionic::sheet("Edit note","Close",ui!{ Input{ placeholder:"Title" } },move ||open.set(false))} }
+            }},
+        )
+    });
+    assert_eq!(layout_of(&root), r#""nav main""#);
+    let nav = root.query_selector("[role=navigation]").unwrap().unwrap();
+    resize_root(&root);
+    sleep(30).await;
+    assert_eq!(layout_of(&root), r#""main" "nav""#);
+    assert!(nav.is_same_node(Some(
+        &root.query_selector("[role=navigation]").unwrap().unwrap()
+    )));
+    let trigger: HtmlElement = root
+        .query_selector("button")
+        .unwrap()
+        .unwrap()
+        .unchecked_into();
+    trigger.focus().unwrap();
+    trigger.click();
+    sleep(20).await;
+    let doc = root.owner_document().unwrap();
+    assert_eq!(doc.active_element().unwrap().tag_name(), "INPUT");
+    key_in(&root, "Tab", true);
+    assert_eq!(
+        doc.active_element().unwrap().text_content().unwrap(),
+        "Close"
+    );
+    key_in(&root, "Tab", false);
+    assert_eq!(doc.active_element().unwrap().tag_name(), "INPUT");
+    key_in(&root, "Escape", false);
+    sleep(20).await;
+    assert!(root.query_selector("[role=dialog]").unwrap().is_none());
+    assert!(trigger.is_same_node(doc.active_element().as_deref()));
+    trigger.click();
+    sleep(20).await;
+    swipe(&root);
+    sleep(20).await;
+    assert!(root.query_selector("[role=dialog]").unwrap().is_none());
+    mounted.unmount();
+    assert_eq!(root.get_attribute("style").unwrap_or_default(), "");
+    remove_frame(&root);
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = r#"
+export async function testViewportDevice() {
+  const adapter=await navigator.gpu?.requestAdapter();
+  return adapter ? await adapter.requestDevice() : null;
+}
+export function testViewportDraw() {
+  return (device, texture)=>{
+    const encoder=device.createCommandEncoder();
+    const pass=encoder.beginRenderPass({colorAttachments:[{view:texture.createView(),clearValue:{r:1,g:0,b:0,a:1},loadOp:"clear",storeOp:"store"}]});
+    pass.end();
+    const buffer=device.createBuffer({size:256,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    encoder.copyTextureToBuffer({texture},{buffer,bytesPerRow:256},[1,1]);
+    device.queue.submit([encoder.finish()]);
+    buffer.mapAsync(GPUMapMode.READ).then(()=>{
+      const p=new Uint8Array(buffer.getMappedRange());
+      device.testViewportPixel=texture.format.startsWith("bgra")?p[2]:p[0];
+      buffer.unmap();buffer.destroy();
+    });
+  };
+}
+export function testViewportDestroy(device){device.destroy();}
+"#)]
+extern "C" {
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportDevice)]
+    fn viewport_device() -> js_sys::Promise;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportDraw)]
+    fn viewport_draw() -> js_sys::Function;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportDestroy)]
+    fn viewport_destroy(device: &wasm_bindgen::JsValue);
+}
+
+#[wasm_bindgen_test]
+async fn external_viewport_webgpu_and_cpu_fallback_follow_resize_and_unmount() {
+    use serge::viewport::{StyleProp, Viewport, WebViewport};
+    let root = container();
+    let device = wasm_bindgen_futures::JsFuture::from(viewport_device())
+        .await
+        .unwrap();
+    let mut producer =
+        Viewport::new("3D preview").cpu(|size| Some([0, 100, 0, 255].repeat(size.byte_len()? / 4)));
+    let gpu = !device.is_null();
+    if gpu {
+        producer = producer.backend(WebViewport::webgpu(&device, &viewport_draw()));
+    } else if option_env!("SERGE_REQUIRE_WEBGPU") == Some("1") {
+        panic!("WebGPU device required");
+    }
+    let m = mount(&root, Scope::root(), move || {
+        producer.element([StyleProp::Width(px(80.)), StyleProp::Height(px(40.))])
+    });
+    let host = root
+        .query_selector("[role=img]")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<HtmlElement>()
+        .unwrap();
+    let fallback = host
+        .query_selector("canvas")
+        .unwrap()
+        .unwrap()
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .unwrap();
+    if gpu {
+        let mut pixel = None;
+        for _ in 0..60 {
+            sleep(16).await;
+            pixel = js_sys::Reflect::get(&device, &"testViewportPixel".into())
+                .unwrap()
+                .as_f64();
+            if pixel == Some(255.0) {
+                break;
+            }
+        }
+        assert_eq!(pixel, Some(255.0));
+        viewport_destroy(&device);
+    }
+    for _ in 0..60 {
+        sleep(16).await;
+        if fallback.style().get_property_value("display").unwrap() == "block" {
+            break;
+        }
+    }
+    assert_eq!(pixel(&fallback, 1., 1.), [0, 100, 0, 255]);
+    host.style().set_property("width", "110px").unwrap();
+    sleep(70).await;
+    assert_eq!(
+        fallback.width(),
+        (110. * web_sys::window().unwrap().device_pixel_ratio()).round() as u32
+    );
+    assert_eq!(
+        host.get_attribute("aria-label").as_deref(),
+        Some("3D preview")
+    );
+    m.unmount();
+    assert!(!fallback.is_connected());
+    root.remove();
 }

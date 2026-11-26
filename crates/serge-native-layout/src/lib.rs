@@ -1,13 +1,12 @@
 //! `serge-native-layout` — flexbox layout of serge's style IR on `taffy`
-//! (pinned, `docs/02-architecture.md` §3). The tree is rebuilt per layout
-//! pass from the caller's nodes; the compact SoA tables and dirty-subtree
-//! reuse of the fork direction are later work.
+//! (pinned, `docs/02-architecture.md` §3). Taffy reads child indices directly
+//! from the scene. Per-pass style, measurement and layout data use dense arrays.
+mod compact;
+#[cfg(test)]
+mod reference;
 
 use serge_style::{Align, Layout, Length, Style};
-use taffy::prelude::{
-    AvailableSpace, Dimension, FlexDirection, LengthPercentage, LengthPercentageAuto, NodeId, Size,
-    TaffyTree,
-};
+use taffy::prelude::{Dimension, FlexDirection, LengthPercentage, LengthPercentageAuto, Size};
 
 /// A node to lay out: its style, whether its content is measured, and its
 /// children (indices into the same slice).
@@ -143,80 +142,7 @@ pub fn compute(
     height: Option<f32>,
     mut measure: impl FnMut(usize, WidthHint) -> (f32, f32),
 ) -> Vec<LayoutBox> {
-    let mut tree: TaffyTree<usize> = TaffyTree::new();
-    let mut ids: Vec<Option<NodeId>> = vec![None; nodes.len()];
-    fn build(
-        tree: &mut TaffyTree<usize>,
-        nodes: &[LayoutNode],
-        ids: &mut [Option<NodeId>],
-        i: usize,
-    ) -> NodeId {
-        let children: Vec<NodeId> = nodes[i]
-            .children
-            .iter()
-            .map(|&c| build(tree, nodes, ids, c))
-            .collect();
-        let style = to_taffy(&nodes[i].style);
-        let id = if children.is_empty() {
-            tree.new_leaf_with_context(style, i)
-        } else {
-            tree.new_with_children(style, &children)
-        }
-        .expect("taffy node");
-        ids[i] = Some(id);
-        id
-    }
-    let root_id = build(&mut tree, nodes, &mut ids, root);
-    // The root fills the available width (and at least the height).
-    let mut root_style = tree.style(root_id).expect("root").clone();
-    if nodes[root].style.width == Length::Auto {
-        root_style.size.width = Dimension::length(width);
-    }
-    if let Some(h) = height {
-        root_style.min_size.height = LengthPercentageAuto::length(h);
-    }
-    tree.set_style(root_id, root_style).expect("root style");
-    let available = Size {
-        width: AvailableSpace::Definite(width),
-        height: height.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite),
-    };
-    tree.compute_layout_with_measure(root_id, available, |inputs, _id, ctx, style| {
-        let i = ctx.map(|c| *c);
-        taffy::compute_leaf_layout(
-            inputs,
-            style,
-            |_, _| 0.0,
-            |known, avail| {
-                let Some(i) = i.filter(|&i| nodes[i].measured) else {
-                    return Size::ZERO;
-                };
-                let hint = match (known.width, avail.width) {
-                    (Some(w), _) => WidthHint::Exact(w),
-                    (None, AvailableSpace::Definite(w)) => WidthHint::AtMost(w),
-                    (None, AvailableSpace::MinContent) => WidthHint::Min,
-                    (None, AvailableSpace::MaxContent) => WidthHint::Max,
-                };
-                let (w, h) = measure(i, hint);
-                Size {
-                    width: known.width.unwrap_or(w),
-                    height: known.height.unwrap_or(h),
-                }
-            },
-        )
-    })
-    .expect("taffy layout");
-    ids.iter()
-        .map(|id| {
-            id.and_then(|id| tree.layout(id).ok())
-                .map(|l| LayoutBox {
-                    x: l.location.x,
-                    y: l.location.y,
-                    width: l.size.width,
-                    height: l.size.height,
-                })
-                .unwrap_or_default()
-        })
-        .collect()
+    compact::compute(nodes, root, width, height, &mut measure)
 }
 
 #[cfg(test)]

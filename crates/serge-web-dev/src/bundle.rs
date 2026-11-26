@@ -48,6 +48,12 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     for e in std::fs::read_dir(from)? {
         let e = e?;
         let target = to.join(e.file_name());
+        if e.file_type()?.is_symlink() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "symbolic link in web assets",
+            ));
+        }
         if e.file_type()?.is_dir() {
             copy_dir(&e.path(), &target)?;
         } else {
@@ -59,6 +65,15 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 
 /// Builds `package` for the browser.
 pub fn build_web(ws: &Workspace, package: &Package, opts: &BuildOptions) -> Result<Bundle, Error> {
+    build_wasm(ws, package, opts, None)
+}
+
+pub(crate) fn build_wasm(
+    ws: &Workspace,
+    package: &Package,
+    opts: &BuildOptions,
+    build_id: Option<&str>,
+) -> Result<Bundle, Error> {
     let lib = package.lib_name.as_deref().filter(|_| package.cdylib).ok_or_else(|| {
         Error::new(format!("`{}` has no `cdylib` library to run in the browser", package.name))
             .hint("add `[lib] crate-type = [\"cdylib\", \"rlib\"]` and a `#[wasm_bindgen(start)]` function")
@@ -76,6 +91,11 @@ pub fn build_web(ws: &Workspace, package: &Package, opts: &BuildOptions) -> Resu
             &package.name,
         ])
         .current_dir(&ws.root);
+    if let Some(id) = build_id {
+        cargo.env("SERGE_BUILD_ID", id);
+    } else {
+        cargo.env_remove("SERGE_BUILD_ID");
+    }
     if opts.release {
         cargo.arg("--release");
     }

@@ -360,19 +360,22 @@ struct FlatRoute {
 }
 
 #[derive(Debug)]
-struct Pattern {
+/// A parsed whole-segment UI route pattern.
+#[derive(Clone)]
+pub struct Pattern {
     source: String,
     segments: Vec<Segment>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Segment {
     Fixed(String),
     Param(String),
 }
 
 impl Pattern {
-    fn parse(path: &str) -> Result<Pattern, String> {
+    /// Parses a route pattern such as `/projects/{id}`.
+    pub fn parse(path: &str) -> Result<Pattern, String> {
         if !path.starts_with('/') {
             return Err(format!("the route `{path}` must start with `/`"));
         }
@@ -399,7 +402,8 @@ impl Pattern {
         })
     }
 
-    fn matches(&self, path: &str) -> Option<Vec<(String, String)>> {
+    /// Matches a concrete path, returning its named parameters in declaration order.
+    pub fn matches(&self, path: &str) -> Option<Vec<(String, String)>> {
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         if parts.len() != self.segments.len() {
             return None;
@@ -601,6 +605,18 @@ impl fmt::Debug for Assembled {
 }
 
 impl Assembled {
+    /// UI routes in matching order, with whether they have client-side guards.
+    pub fn routes(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.router
+            .routes
+            .iter()
+            .map(|r| (r.pattern.source.as_str(), !r.guards.is_empty()))
+    }
+    /// Whether the app declares a root screen in addition to its named routes.
+    pub fn has_root(&self) -> bool {
+        self.router.root.is_some()
+    }
+
     /// The router.
     pub fn router(&self) -> Rc<Router> {
         self.router.clone()
