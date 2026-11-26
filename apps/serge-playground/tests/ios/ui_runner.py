@@ -1,6 +1,17 @@
 """Build a native XCTest runner targeting an already installed iPhone simulator app."""
 import shutil
 import subprocess
+from pathlib import Path
+
+
+def signals(udid, marker):
+    result = subprocess.run(["xcrun", "simctl", "get_app_container", udid,
+                             "org.hyperish.verification.tests.xctrunner", "data"],
+                            text=True, capture_output=True)
+    if result.returncode == 0:
+        directory = Path(result.stdout.strip()) / "tmp"
+        if (directory / marker).is_file():
+            return directory
 
 
 def project_for(root, source, udid, results, host=None):

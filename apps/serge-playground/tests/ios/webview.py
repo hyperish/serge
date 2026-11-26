@@ -16,7 +16,7 @@ SERGE = TESTS.parents[2]
 HYVE = SERGE.parent / "hyve"
 sys.path.insert(0, str(HYVE / "apps/hyve-cli/tests"))
 from ios_simulator import installed_app, sim
-from ui_runner import project_for
+from ui_runner import project_for, signals
 
 
 @contextmanager
@@ -30,12 +30,8 @@ def confirming_links(root, udid):
             # simulator before its first test can signal readiness.
             until = time.monotonic() + 600
             while time.monotonic() < until and driver.poll() is None:
-                if runner is None:
-                    result = subprocess.run(["xcrun", "simctl", "get_app_container", udid,
-                                             "org.hyperish.verification.tests.xctrunner", "data"], text=True, capture_output=True)
-                    if result.returncode == 0:
-                        runner = Path(result.stdout.strip()) / "tmp"
-                if runner is not None and (runner / "links-ready").is_file():
+                runner = signals(udid, "links-ready")
+                if runner is not None:
                     break
                 time.sleep(1)
             else:

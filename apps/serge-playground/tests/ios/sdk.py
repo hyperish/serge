@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 
-from ui_runner import project_for
+from ui_runner import project_for, signals
 from webview import HYVE, SERGE, installed_app, sim
 
 HERE = Path(__file__).resolve().parent
@@ -63,15 +63,22 @@ def run_shortcut(root, udid):
     root.mkdir()
     sim("openurl", udid, "shortcuts://create-shortcut")
     project, args = project_for(root, HERE / "ShortcutsTest.swift", udid, root / "Shortcuts.xcresult")
-    subprocess.run(args, cwd=project, check=True)
     expected = {"project_name": "Saved project", "progress": .75}
-    until = time.monotonic() + 8
-    while time.monotonic() < until:
-        value = sim("pbpaste", udid)
-        if value.startswith("{") and json.loads(value) == expected:
-            return
-        time.sleep(.2)
-    raise AssertionError(f"Unexpected result copied by Shortcuts: {value!r}")
+    runner, value, copied = None, None, False
+    with subprocess.Popen(args, cwd=project) as test:
+        until = time.monotonic() + 720
+        while test.poll() is None:
+            if time.monotonic() >= until:
+                test.terminate()
+                raise TimeoutError("Shortcuts UI test exceeded 12 minutes")
+            runner = runner or signals(udid, "shortcut-running")
+            if runner and not copied:
+                value = sim("pbpaste", udid)
+                if value.startswith("{") and json.loads(value) == expected:
+                    (runner / "shortcut-copied").touch()
+                    copied = True
+            time.sleep(.5)
+        assert test.returncode == 0 and copied, f"Shortcuts UI exited {test.returncode}, clipboard: {value!r}"
 
 
 def verify_lock_screen(root, bundle):
@@ -106,6 +113,7 @@ def ui_suite(root, udid, package, data):
     with subprocess.Popen(args, cwd=project) as run:
         sent = False
         last_face = 0
+        runner = None
         until = time.monotonic() + 720
         while run.poll() is None:
             if time.monotonic() > until:
@@ -115,8 +123,12 @@ def ui_suite(root, udid, package, data):
             if not sent and grant.exists() and grant.read_text() == "allowed":
                 sim("push", udid, package, str(payload))
                 sent = True
-            # The first scan can occur while the system permission sheet is still visible.
-            if (data / "tmp/serge-biometric-ready.txt").exists() and not (data / "tmp/serge-biometric.txt").exists() and time.monotonic() - last_face > 1:
+            runner = runner or signals(udid, "platform-ui-ready")
+            if (runner and (runner / "share-tapped").is_file() and not (runner / "share-copied").exists()
+                    and sim("pbpaste", udid) == "Serge shared project"):
+                (runner / "share-copied").touch()
+            if (runner and (runner / "face-permission-checked").is_file() and (data / "tmp/serge-biometric-ready.txt").exists()
+                    and not (data / "tmp/serge-biometric.txt").exists() and time.monotonic() - last_face > 1):
                 subprocess.run(["applesimutils", "--byId", udid, "--biometricMatch"], check=True, stdout=subprocess.DEVNULL)
                 last_face = time.monotonic()
             time.sleep(.2)

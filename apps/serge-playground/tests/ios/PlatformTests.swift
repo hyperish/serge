@@ -3,9 +3,11 @@ import Vision
 
 final class PlatformTests: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "org.example.ios-sdk")
+    let signals = FileManager.default.temporaryDirectory
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        try Data().write(to: signals.appendingPathComponent("platform-ui-ready"), options: .atomic)
     }
 
     func start(_ name: String) {
@@ -21,7 +23,7 @@ final class PlatformTests: XCTestCase {
     }
 
     func completed(_ mode: String) {
-        XCTAssertTrue(app.staticTexts["Completed " + mode].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Completed " + mode].waitForExistence(timeout: 30), app.debugDescription)
     }
 
     func testAction() {
@@ -30,14 +32,23 @@ final class PlatformTests: XCTestCase {
         completed("action")
     }
 
-    func testBiometric() {
+    func testBiometric() throws {
         start("biometric")
         let board = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for host in [board, app] {
-            let allow = host.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["OK","Allow"])).firstMatch
-            if allow.waitForExistence(timeout: 2) { allow.tap() }
+        var granted = false
+        let until = Date().addingTimeInterval(10)
+        while !granted && Date() < until {
+            for host in [board, app] {
+                let allow = host.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["OK", "Allow"])).firstMatch
+                if allow.exists && allow.isHittable {
+                    allow.tap()
+                    granted = true
+                    break
+                }
+            }
+            if !granted { Thread.sleep(forTimeInterval: 0.2) }
         }
-        // The driver supplies a matching simulated face and verifies the LocalAuthentication result.
+        try Data().write(to: signals.appendingPathComponent("face-permission-checked"), options: .atomic)
         completed("biometric")
     }
 
@@ -50,9 +61,14 @@ final class PlatformTests: XCTestCase {
         completed("time")
     }
 
-    func testShare() {
+    func testShare() throws {
         start("share")
         tap(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Copy")).firstMatch)
+        try Data().write(to: signals.appendingPathComponent("share-tapped"), options: .atomic)
+        let copied = signals.appendingPathComponent("share-copied")
+        let predicate = NSPredicate { _, _ in FileManager.default.fileExists(atPath: copied.path) }
+        let clipboard = XCTNSPredicateExpectation(predicate: predicate, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [clipboard], timeout: 45), .completed, app.debugDescription)
         start("read-shared")
         completed("read-shared")
     }

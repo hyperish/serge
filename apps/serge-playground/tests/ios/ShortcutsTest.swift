@@ -48,9 +48,18 @@ final class ShortcutsTest: XCTestCase {
         let run = shortcuts.buttons.matching(NSPredicate(format: "label IN %@", ["Run Shortcut", "Run", "Play"])).firstMatch
         XCTAssertTrue(run.waitForExistence(timeout: 6), shortcuts.debugDescription)
         run.tap()
-        for host in [shortcuts, springboard] {
-            let allow = host.alerts.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "Always Allow", "Allow Once"])).firstMatch
-            if allow.waitForExistence(timeout: 1) { allow.tap() }
+        let signals = FileManager.default.temporaryDirectory
+        try Data().write(to: signals.appendingPathComponent("shortcut-running"), options: .atomic)
+        let copied = signals.appendingPathComponent("shortcut-copied")
+        let until = Date().addingTimeInterval(90)
+        while Date() < until {
+            if FileManager.default.fileExists(atPath: copied.path) { return }
+            for host in [shortcuts, springboard] {
+                let allow = host.buttons.matching(NSPredicate(format: "label IN %@", ["Allow", "Always Allow", "Allow Once"])).firstMatch
+                if allow.exists && allow.isHittable { allow.tap() }
+            }
+            Thread.sleep(forTimeInterval: 0.2)
         }
+        XCTFail("The shortcut did not copy its widget state.\n\(shortcuts.debugDescription)\n\(springboard.debugDescription)")
     }
 }
