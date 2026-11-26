@@ -230,6 +230,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: ${{ matrix.profile }}
+          pre-emulator-launch-script: >-
+            if [ "$SERGE_REQUIRE_FOLD" = true ]; then
+            python3 "$GITHUB_WORKSPACE/serge/apps/serge-playground/tests/android/pixel_fold.py" "$HOME/.android/avd/test.avd/config.ini";
+            fi
           emulator-port: 5554
           working-directory: serge
           script: |
