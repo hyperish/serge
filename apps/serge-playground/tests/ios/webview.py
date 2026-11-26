@@ -21,7 +21,8 @@ from ui_runner import project_for
 
 @contextmanager
 def confirming_links(root, udid):
-    project, args = project_for(root, TESTS / "ios/LinkConfirmation.swift", udid, root / "Links.xcresult")
+    project, args = project_for(root, TESTS / "ios/LinkConfirmation.swift", udid, root / "Links.xcresult",
+                                host=TESTS / "ios/LinkHost.swift")
     runner = None
     with subprocess.Popen(args, cwd=project) as driver:
         try:
@@ -37,7 +38,7 @@ def confirming_links(root, udid):
                 time.sleep(.4)
             else:
                 raise RuntimeError("the SpringBoard UI test did not start")
-            yield
+            yield runner
         finally:
             if driver.poll() is None:
                 if runner is not None:
@@ -91,7 +92,7 @@ def verify(codec):
         app = prepare(Path(directory), cli)
         subprocess.run([cli, "build", "--debug", "--format", "ios-sim"], cwd=app, check=True)
         bundle = app / "target/debug/ios/ios-slot/simulator/ios-slot.app"
-        with installed_app(bundle, match_xcode=True) as (udid, package, data, runtime), confirming_links(Path(directory), udid):
+        with installed_app(bundle, match_xcode=True) as (udid, package, data, runtime), confirming_links(Path(directory), udid) as runner:
             assets = data / "tmp/slot-codec"
             assets.mkdir()
             for name in ["webview_codec.js", "webview_codec_bg.wasm"]:
@@ -115,12 +116,14 @@ def verify(codec):
                         print(stderr.read_text(errors="replace")[-6000:], flush=True)
                     raise RuntimeError(f"iOS WKWebView did not complete the {rail} scenario")
                 print(f"{runtime} WKWebView resized and recovered the guarded edit over {rail}", flush=True)
-                link = "serge-slot://projects/42?mode=edit"
-                sim("openurl", udid, link)
+                link = f"serge-slot://projects/42?mode=edit&rail={rail}"
+                pending = runner / "link.pending"
+                pending.write_text(link)
+                pending.replace(runner / f"open-{rail}")
                 delivered = receipt.with_suffix(".url")
-                # The first link needs SpringBoard confirmation before UIKit
-                # can resume the app and deliver the URL to its delegate.
-                until = time.monotonic() + 45
+                # The foreground sender opens this URL from a button. UIKit
+                # must resume the receiving app and deliver the original URL.
+                until = time.monotonic() + 60
                 while time.monotonic() < until:
                     if delivered.exists() and delivered.read_text() == link:
                         break

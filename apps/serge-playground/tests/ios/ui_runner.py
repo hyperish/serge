@@ -3,11 +3,14 @@ import shutil
 import subprocess
 
 
-def project_for(root, source, udid, results):
+def project_for(root, source, udid, results, host=None):
     project = root / "ui"
     project.mkdir()
     shutil.copyfile(source, project / "PlatformTests.swift")
-    (project / "Host.swift").write_text("import UIKit\n@main final class Host: UIResponder, UIApplicationDelegate {}\n")
+    if host:
+        shutil.copyfile(host, project / "Host.swift")
+    else:
+        (project / "Host.swift").write_text("import UIKit\n@main final class Host: UIResponder, UIApplicationDelegate {}\n")
     (project / "project.yml").write_text("""name: Platform
 options:
   deploymentTarget: {iOS: '16.2'}
