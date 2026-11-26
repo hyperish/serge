@@ -607,7 +607,9 @@ export async function testViewportDevice() {
   return adapter ? await adapter.requestDevice() : null;
 }
 export function testViewportDraw() {
-  return (device, texture)=>{
+  let resolvePixel, rejectPixel;
+  const pixel = new Promise((resolve, reject) => { resolvePixel = resolve; rejectPixel = reject; });
+  const draw = (device, texture)=>{
     const encoder=device.createCommandEncoder();
     const pass=encoder.beginRenderPass({colorAttachments:[{view:texture.createView(),clearValue:{r:1,g:0,b:0,a:1},loadOp:"clear",storeOp:"store"}]});
     pass.end();
@@ -616,10 +618,20 @@ export function testViewportDraw() {
     device.queue.submit([encoder.finish()]);
     buffer.mapAsync(GPUMapMode.READ).then(()=>{
       const p=new Uint8Array(buffer.getMappedRange());
-      device.testViewportPixel=texture.format.startsWith("bgra")?p[2]:p[0];
+      resolvePixel(texture.format.startsWith("bgra")?p[2]:p[0]);
       buffer.unmap();buffer.destroy();
-    });
+    }, rejectPixel);
   };
+  draw.pixel = pixel;
+  return draw;
+}
+export async function testViewportPixel(draw) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timed out waiting for WebGPU pixel readback")), 10000);
+  });
+  try { return await Promise.race([draw.pixel, deadline]); }
+  finally { clearTimeout(timer); }
 }
 export function testViewportDestroy(device){device.destroy();}
 "#)]
@@ -628,6 +640,8 @@ extern "C" {
     fn viewport_device() -> js_sys::Promise;
     #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportDraw)]
     fn viewport_draw() -> js_sys::Function;
+    #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportPixel)]
+    fn viewport_pixel(draw: &js_sys::Function) -> js_sys::Promise;
     #[wasm_bindgen::prelude::wasm_bindgen(js_name=testViewportDestroy)]
     fn viewport_destroy(device: &wasm_bindgen::JsValue);
 }
@@ -642,8 +656,9 @@ async fn external_viewport_webgpu_and_cpu_fallback_follow_resize_and_unmount() {
     let mut producer =
         Viewport::new("3D preview").cpu(|size| Some([0, 100, 0, 255].repeat(size.byte_len()? / 4)));
     let gpu = !device.is_null();
+    let draw = viewport_draw();
     if gpu {
-        producer = producer.backend(WebViewport::webgpu(&device, &viewport_draw()));
+        producer = producer.backend(WebViewport::webgpu(&device, &draw));
     } else if option_env!("SERGE_REQUIRE_WEBGPU") == Some("1") {
         panic!("WebGPU device required");
     }
@@ -663,17 +678,10 @@ async fn external_viewport_webgpu_and_cpu_fallback_follow_resize_and_unmount() {
         .dyn_into::<web_sys::HtmlCanvasElement>()
         .unwrap();
     if gpu {
-        let mut pixel = None;
-        for _ in 0..60 {
-            sleep(16).await;
-            pixel = js_sys::Reflect::get(&device, &"testViewportPixel".into())
-                .unwrap()
-                .as_f64();
-            if pixel == Some(255.0) {
-                break;
-            }
-        }
-        assert_eq!(pixel, Some(255.0));
+        let pixel = wasm_bindgen_futures::JsFuture::from(viewport_pixel(&draw))
+            .await
+            .expect("read back the first rendered WebGPU pixel");
+        assert_eq!(pixel.as_f64(), Some(255.0));
         viewport_destroy(&device);
     }
     for _ in 0..60 {
