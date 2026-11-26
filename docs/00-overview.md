@@ -16,7 +16,7 @@
 2. **Web 타깃 (DOM 표현·출력 + CRA급 데브 서빙 + Ionic형 웹 UI + SEO/SSG)**:
    - 브라우저의 모든 DOM 요소, 이벤트, 스타일, Web API를 `hyve`/`serge`로 표현해 쉽게 구축하고 **실제 DOM(및 웹 번들)으로 출력**합니다.
    - 컴포넌트 내 `<Title>`, `<Meta>`, OpenGraph 선언 시 SSR/SSG `<head>` 자동 주입 및 랜딩·문서 사이트용 **정적 사이트 생성(SSG)**을 지원합니다.
-   - `localStorage`/`IndexedDB`와 동기화되는 **영속 시그널(`persistent_signal`)**, 오프라인 편집 큐, 웹 접근성(ARIA·포커스 트랩), **Ionic 스타일 적응형 웹 UI**, **CRA 수준의 로컬 프리뷰·데브 서버(`serge-web-dev`)**를 내장합니다.
+   - `localStorage`/`IndexedDB`와 동기화되는 **영속 시그널(`persistent_signal`)**, 오프라인 편집 큐, 웹 접근성(ARIA·포커스 트랩), **Ionic 스타일 적응형 웹 UI**, **CRA 수준의 로컬 개발 서버(`serge-web-dev`)**를 내장합니다.
 3. **Native 타깃 (GPU 가속 + 필수 CPU 폴백 · 데스크톱 & iOS/Android 풀 기본기)**:
    - GPUI(Zed)와 `anomalyco/rune`처럼 UI 엘리먼트, 레이아웃, 벡터 경로, 그림자, 글리프 아틀라스, **외부 3D/미디어 GPU 텍스처(`ExternalTexture` 제로카피 합성)**를 GPU로 고속 렌더링하며, **필수 CPU 소프트웨어 폴백 렌더러**와 **네이티브 접근성 트리 브리지(`AccessKit` 계열)**를 제공합니다.
    - **로컬 백엔드/엔진 ↔ UI 3단계 통신**: ① 인프로세스(`Signal<T>` + Lock-Free `SharedRingBuf`), ② 로컬 멀티프로세스 IPC(OS `shm`/`mmap` 공유 메모리 Ring Buffer + Unix Socket/Named Pipe 기반 `hyve-serde` 바이너리 RPC — `hyve-core`의 `#[repr(C)]` POD·찢어짐 방지·`0600` 권한 격리·App Sandbox/App Group 제약 준수), ③ 원격 서버(Dual-Rail)를 동일 인터페이스로 지원합니다.
