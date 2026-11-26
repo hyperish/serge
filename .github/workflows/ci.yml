@@ -8,15 +8,14 @@ on:
     branches: [main]
 
 env:
+  # Use the sibling revisions exercised together in platform acceptance.
+  HYVE_REF: ab3b833cdf5bfd5ea32d5f20b92fc198447d70d8
+  ORBIC_REF: d606b1a03405d83c4ac086c58d8d8c2434237474
   CARGO_TERM_COLOR: always
   # Must match `rust-version` in Cargo.toml (hyperish/docs 05-development-rules.md §8).
   MSRV: "1.94"
   # Must match `wasm-bindgen` in Cargo.lock.
   WASM_BINDGEN_VERSION: "0.2.130"
-  # Check the three development workspaces together, including adapter changes
-  # made since the last published prereleases.
-  HYVE_REF: feat/phase1
-  ORBIC_REF: feat/phase1
 
 jobs:
   check:
