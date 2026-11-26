@@ -42,7 +42,8 @@ def exercise(adb, server_binary, apk):
                 x, y, r, b = map(int, re.findall(r"-?\d+", item.get("bounds")))
                 if r > x and b > y:
                     return (x + r) // 2, (y + b) // 2
-        raise AssertionError(f"missing {label!r} {widget!r} in {seen}")
+        foreground = sorted({item.get("package", "") for item in tree.iter("node")})
+        raise AssertionError(f"missing {label!r} {widget!r} in {seen}, foreground packages {foreground}")
 
     def tap(label=None, widget=None):
         x, y = node(label, widget)
@@ -70,6 +71,8 @@ def exercise(adb, server_binary, apk):
             reverse = True
             device("install", "--no-incremental", "-r", apk)
             device("shell", "am", "force-stop", PKG)
+            device("shell", "input", "keyevent", "KEYCODE_WAKEUP")
+            device("shell", "wm", "dismiss-keyguard")
             launch()
             tap("Counter")
             tap("Increment", "android.widget.Button")
@@ -102,6 +105,12 @@ def exercise(adb, server_binary, apk):
             with sqlite3.connect(db) as cx:
                 assert cx.execute("SELECT owner,title FROM projects").fetchall() == [("demo", "AndroidProject")]
             print("Android touch, accessibility, IME, suspend/resume, guarded save, reload, refusal and SQLite passed.")
+        except Exception:
+            for args in [("shell", "dumpsys", "activity", "exit-info", PKG),
+                         ("logcat", "-d", "-s", "RustStdoutStderr", "AndroidRuntime", "libc", "DEBUG")]:
+                log = subprocess.run([*adb, *args], capture_output=True, text=True, errors="replace")
+                print("\n".join(log.stdout.splitlines()[-80:]), file=sys.stderr)
+            raise
         finally:
             server.terminate()
             server.wait()
