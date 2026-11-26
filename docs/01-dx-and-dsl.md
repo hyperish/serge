@@ -154,12 +154,30 @@ pub fn ExportIsland(state: ExportStatus) -> LiveActivity {
 }
 ```
 
+위 예제의 `#[ios::live_activity]`와 `#[android::widget]`는 정적 뷰를 플랫폼 코드로 컴파일합니다. `[package.metadata.serge]`에 `widgets = ["src/platform_widgets.rs"]`와 Android 라이브러리의 `android_package`를 선언하면 `hyve build`가 생성합니다. 결과는 `target/serge-widgets/<패키지>/current`에 기록된 세대 디렉터리에 있습니다. iOS 디렉터리는 ActivityAttributes·SwiftUI 화면·WidgetBundle 진입점을 담습니다. Android 디렉터리는 Glance 위젯·수신기·매니페스트·리소스를 담은 Gradle 라이브러리입니다. 호스트는 선언 함수를 호출해 얻은 `PlatformWidget.state_json`을 전달합니다. JSON에는 뷰에서 참조하는 필드만 실립니다. [실행 예제](../apps/serge-playground/src/platform_widgets.rs) · [코드 생성 테스트](../apps/serge-cli/tests/widgets.rs)
+
 > 위 `ui!` 5대 최소 문법과 `feature()`/`#[component]` 분리는 확정 규격이며, 잔여 타깃 확장 세부 사항은 [`04-open-questions.md`](04-open-questions.md)에서 추적합니다.
 
 ## 2. `hyve` CLI와 통합된 멀티타깃 개발 흐름
 
-- **내장 웹 데브 서버 (`serge-web-dev` / `hyve preview --web`)**: CRA(Create React App)나 Vite처럼 `orbic` 백엔드 없이도 즉시 로컬 개발 서버를 띄워 WASM/JS 번들링, 정적 에셋 서빙, SPA 라우팅 폴백, 상태 보존 HMR을 수행합니다.
+- **내장 웹 데브 서버 (`serge-web-dev` / `hyve dev --web`)**: CRA(Create React App)나 Vite처럼 `orbic` 백엔드 없이도 즉시 로컬 개발 서버를 띄워 WASM/JS 번들링, 정적 에셋 서빙, SPA 라우팅 폴백, 상태 보존 HMR을 수행합니다.
   - **Phase 1 프로토타입 (2026-11-25)**: 소스가 바뀌면 다시 빌드하고 페이지를 새로 고칩니다(상태 보존 HMR은 **미완**). 웹 앱은 매니페스트의 `[package.metadata.serge] web = true`로 표시하고, 번들은 `target/serge/<패키지>/`에 생깁니다. 앱의 `web/` 폴더(있으면 `index.html` 포함)를 번들에 복사합니다.
-- **네이티브 실시간 프리뷰 (`hyve preview --native` / `--ios` / `--android`)**: 데스크톱 창 또는 모바일 시뮬레이터/실기기에서 `hyve-state`를 유지한 채 GPU/CPU 네이티브 UI를 즉시 핫리로드합니다.
+- **네이티브 앱 로컬 실행**. `hyve dev --native`는 데스크톱 앱을 빌드해 창을 엽니다. `hyve-state`를 보존하는 네이티브 핫리로드와 모바일 타깃 선택(`--ios`, `--android`)은 후속 단계의 목표입니다.
 - **통합 정적 검증 (`hyve lint`)**: 웹 접근성(a11y)·Hydration 불일치 검사와 네이티브 UI 스레드 블로킹·WebView 무단 유입·레이아웃 순환 참조 검사를 함께 수행합니다.
 - **헤드리스 통합 테스트 (`hyve test`)**: 웹 타깃은 헤드리스 DOM/SSR 스냅샷으로, 네이티브 타깃은 **CPU 폴백 렌더러(`serge-native-cpu`)**를 이용한 프레임 버퍼 스냅샷 및 입력 시뮬레이션으로 GPU 없는 CI에서도 고속 검증합니다.
+
+### 개발 세션·데스크톱 실행 기록 (2026-11-26)
+
+`hyve dev --web`과 `hyve dev --native`에서 키와 타입을 지정한 `dev_signal`의 값을 재빌드 뒤 복원합니다. 웹에서는 탭 단위로 보관하고 네이티브에서는 개발 런처가 세션을 관리합니다. 잘못된 빌드를 고치면 마지막 성공한 앱의 값을 이어갑니다. 여러 창에 공유할 값은 `hyve::state::shared_signal`을 사용합니다. 워커가 변경하면 각 창의 UI 스레드가 해당 화면의 구독자를 실행합니다. [실제 재빌드 테스트](../apps/serge-cli/tests/reload.py) · [다중 창 CPU·Metal 테스트](../apps/serge-playground/tests/windows.rs)
+
+`serge/desktop-system`으로 네이티브 메뉴·트레이를 활성화할 수 있습니다. macOS에서는 메뉴 막대, 컨텍스트 메뉴와 상태 항목의 명령이 포커스를 가진 창의 뷰에 전달됩니다. Linux X11 창은 네이티브 GTK 메뉴 막대와 우클릭 메뉴를 열고, 메뉴 명령을 포커스한 창으로 전달합니다. Wayland 세션에서는 XWayland로 GTK 메뉴와 웹뷰를 열 수 있습니다. 순수 Wayland 창은 데스크톱 셸의 D-Bus 상태 항목을 사용합니다. 버튼·체크박스·입력·슬라이더는 AccessKit을 통해 상태와 액션을 노출합니다. [AppKit 명령 테스트](../apps/serge-playground/tests/system_menu.rs) · [접근성 테스트](../crates/serge/tests/native.rs)
+
+### 적응형 웹 탐색과 모달
+
+`serge/ionic` 피처의 `ionic::shell(navigation, content)`는 같은 탐색 요소를 넓은 화면에서는 측면에, 좁은 화면에서는 하단에 배치합니다. `ionic::sheet(label, dismiss_label, content, on_dismiss)`를 조건부 영역에 넣으면 모달 안에서 포커스가 순환하고 닫은 뒤 열었던 컨트롤로 돌아갑니다. Escape, 배경 클릭과 손잡이의 아래쪽 스와이프가 같은 닫기 콜백을 호출합니다. SSR 호스트는 `ionic::STYLESHEET`을 문서 head에 포함할 수 있습니다. [컴포넌트](../crates/serge-web-ionic/src/lib.rs) · [Chrome 인수 테스트](../crates/serge/tests/web.rs)
+
+### Android 앱 실행과 인수
+
+`hyve init`의 UI·풀스택 템플릿은 Android NativeActivity 진입점을 포함합니다. 메인 활동이 제공한 `AndroidApp`을 `serge::android::launch`에 넘기면 같은 라우트와 화면을 실행합니다. 터치와 키보드 포커스는 네이티브 트리를 사용하고 AccessKit이 Android 접근성 트리와 액션을 연결합니다. 앱이 배경으로 가면 렌더 표면을 해제하고 복귀 시 같은 뷰 상태로 다시 그립니다. Vulkan 소프트웨어 어댑터만 제공하는 Android 환경에서는 CPU로 그립니다. [Android NativeActivity](https://developer.android.com/reference/android/app/NativeActivity)
+
+`serge-playground`는 기본적으로 앱의 `127.0.0.1:3000/v1`에 접속합니다. 개발 에뮬레이터에서 호스트 서버를 쓸 때는 `adb reverse tcp:3000 tcp:3000`으로 연결합니다. 다른 주소는 빌드 시 `SERGE_API_URL`로 지정합니다. 인수 테스트는 선택한 에뮬레이터에서만 임시 서버와 포트를 사용해 APK 설치, 카운터 상태 복원, 로그인·프로젝트 입력·저장·재조회, 세션 만료 후 쓰기 거부와 DB 행 수를 확인합니다. Android 35 arm64에서 APK와 AAB로부터 생성한 APK 양쪽에서 수행했습니다. [에뮬레이터 통합 테스트](../apps/serge-playground/tests/android/projects.py)
