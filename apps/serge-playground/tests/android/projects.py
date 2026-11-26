@@ -88,6 +88,7 @@ def exercise(adb, server_binary, apk):
             node("No projects yet.")
             tap(widget="android.widget.EditText")
             device("shell", "input", "text", "AndroidProject")
+            node("AndroidProject", "android.widget.EditText")
             tap("Save", "android.widget.Button")
             node("Saved #1 on the server.")
             node("#1 AndroidProject")
@@ -100,6 +101,7 @@ def exercise(adb, server_binary, apk):
             server, _ = start(db, port)
             tap(widget="android.widget.EditText")
             device("shell", "input", "text", "RefusedProject")
+            node("RefusedProject", "android.widget.EditText")
             tap("Save", "android.widget.Button")
             node("The server refused: sign in to continue (unauthenticated)")
             with sqlite3.connect(db) as cx:
