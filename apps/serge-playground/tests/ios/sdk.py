@@ -169,7 +169,6 @@ def verify(root):
 
         for mode in ["clipboard", "widgets", "intent", "activity", "background", "biometric-none"]:
             check(mode, lambda m=mode: native(m))
-        check("Shortcuts editor and clipboard output", lambda: run_shortcut(root / "shortcuts", udid))
         subprocess.run(["xcrun", "simctl", "terminate", udid, package], capture_output=True)
         def run_ui():
             subprocess.run(["applesimutils", "--byId", udid, "--biometricEnrollment", "YES"], check=True)
@@ -177,6 +176,8 @@ def verify(root):
             assert code == 0, f"xcodebuild test exited {code}"
         check("XCUITest", run_ui)
         check("installed Home widget family", lambda: native("widget-families"))
+        # Shortcuts indexes the intent metadata of the installed widget extension.
+        check("Shortcuts editor and clipboard output", lambda: run_shortcut(root / "shortcuts", udid))
         for mode, expected in {"action": r"Index\(0\)", "date": r'Selected\("\d{4}-\d\d-\d\d"\)',
                                "time": "Cancelled", "share": "presented", "export": "serge-export.txt",
                                "import": "Serge document bytes", "import-cancel": "cancelled", "read-shared": "Serge shared project",

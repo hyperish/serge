@@ -25,13 +25,18 @@ final class ShortcutsTest: XCTestCase {
             let editing = fields.firstMatch
             editing.typeText(title)
             let result = find(title)
-            if !result.waitForExistence(timeout: 6), title == "Read ExportHome" {
-                // The app's action catalog can be ready before the global search index.
-                shortcuts.buttons["Clear search field"].tap()
-                let provider = shortcuts.tables.cells.containing(.staticText, identifier: "ios-sdk").firstMatch
-                if provider.waitForExistence(timeout: 8) {
-                    provider.tap()
-                } else {
+            if title == "Read ExportHome" {
+                let until = Date().addingTimeInterval(90)
+                while !result.waitForExistence(timeout: 6) && Date() < until {
+                    // A query issued before indexing finishes can keep its empty result.
+                    let clear = shortcuts.buttons["Clear search field"].firstMatch
+                    guard clear.exists else { break }
+                    clear.tap()
+                    let provider = shortcuts.tables.cells.containing(.staticText, identifier: "ios-sdk").firstMatch
+                    if provider.waitForExistence(timeout: 3) {
+                        provider.tap()
+                        break
+                    }
                     fields.firstMatch.typeText(title)
                 }
             }
