@@ -38,15 +38,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: serge
+          fetch-depth: 0
       - uses: actions/checkout@v4
         with:
           repository: hyperish/hyve
-          ref: ab3b833cdf5bfd5ea32d5f20b92fc198447d70d8
+          ref: 3870159a603b2acfe5e18382d83cdca2fe7f4bb5
           path: hyve
       - uses: actions/checkout@v4
         with:
           repository: hyperish/orbic
-          ref: d606b1a03405d83c4ac086c58d8d8c2434237474
+          ref: 1caa7b43b0a3d234f705e702feee78e656d5185c
           path: orbic
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -81,9 +82,35 @@ jobs:
                   if actual != version:
                       raise SystemExit(f"{crate} is {actual}, tag requested {version}")
           print("Selected crates:", ", ".join(sorted(selected)))
+          # A coordinated release can publish cross-repository dependencies before tagging.
+          prepublished = False
+          if os.environ["GITHUB_EVENT_NAME"] == "push":
+              import io, tarfile, urllib.error, urllib.request
+              prepublished = True
+              for crate, actual in selected.items():
+                  url = f"https://static.crates.io/crates/{crate}/{crate}-{actual}.crate"
+                  try:
+                      with urllib.request.urlopen(url, timeout=45) as response:
+                          archive = response.read()
+                  except urllib.error.HTTPError as error:
+                      if error.code not in (403, 404):
+                          raise
+                      prepublished = False
+                      break
+                  prefix = f"{crate}-{actual}"
+                  with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as package:
+                      vcs = json.load(package.extractfile(f"{prefix}/.cargo_vcs_info.json"))["git"]
+                  if vcs.get("dirty"):
+                      raise SystemExit(f"{crate} was published from a dirty checkout")
+                  subprocess.run(["git", "merge-base", "--is-ancestor", vcs["sha1"], "HEAD"], check=True)
+                  subprocess.run(["git", "diff", "--quiet", vcs["sha1"], "HEAD", "--", ".", ":(exclude).github"], check=True)
+              if prepublished:
+                  print("Verified the published archives against the release source.")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"prepublished={str(prepublished).lower()}", file=output)
               print(f"package={name}", file=output)
       - name: Publish selected crates in dependency order
+        if: steps.target.outputs.prepublished != 'true'
         shell: bash
         env:
           PACKAGE: ${{ steps.target.outputs.package }}

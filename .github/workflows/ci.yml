@@ -9,8 +9,8 @@ on:
 
 env:
   # Use the sibling revisions exercised together in platform acceptance.
-  HYVE_REF: ab3b833cdf5bfd5ea32d5f20b92fc198447d70d8
-  ORBIC_REF: d606b1a03405d83c4ac086c58d8d8c2434237474
+  HYVE_REF: 3870159a603b2acfe5e18382d83cdca2fe7f4bb5
+  ORBIC_REF: 1caa7b43b0a3d234f705e702feee78e656d5185c
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
