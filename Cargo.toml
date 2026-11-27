@@ -3,7 +3,7 @@ members = ["crates/serge-adapter-webview", "crates/serge-native-sys", "crates/se
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 edition = "2024"
 # The highest requirement of the pinned stack and our code: vello_cpu 0.4
 # needs 1.89, and the playground links orbic (1.94) (`hyperish/docs`
@@ -14,32 +14,32 @@ repository = "https://github.com/hyperish/serge"
 authors = ["Hyperish Contributors"]
 
 [workspace.dependencies]
-serge-adapter-webview = { path = "crates/serge-adapter-webview", version = "=0.1.0-alpha.1" }
-serge-native-sys = { path = "crates/serge-native-sys", version = "=0.1.0-alpha.1" }
-serge-native-hotpatch = { path = "crates/serge-native-hotpatch", version = "=0.1.0-alpha.1" }
-serge-web-ionic = { path = "crates/serge-web-ionic", version = "=0.1.0-alpha.1" }
-serge-widget-codegen = { path = "crates/serge-widget-codegen", version = "=0.1.0-alpha.1" }
-serge = { path = "crates/serge", version = "=0.1.0-alpha.1" }
-serge-adapter-client = { path = "crates/serge-adapter-client", version = "=0.1.0-alpha.1" }
-serge-core = { path = "crates/serge-core", version = "=0.1.0-alpha.1" }
-serge-macros = { path = "crates/serge-macros", version = "=0.1.0-alpha.1" }
-serge-native = { path = "crates/serge-native", version = "=0.1.0-alpha.1" }
-serge-native-cpu = { path = "crates/serge-native-cpu", version = "=0.1.0-alpha.1" }
-serge-native-gpu = { path = "crates/serge-native-gpu", version = "=0.1.0-alpha.1" }
-serge-native-layout = { path = "crates/serge-native-layout", version = "=0.1.0-alpha.1" }
-serge-native-text = { path = "crates/serge-native-text", version = "=0.1.0-alpha.1" }
-serge-platform-desktop = { path = "crates/serge-platform-desktop", version = "=0.1.0-alpha.1" }
-serge-router = { path = "crates/serge-router", version = "=0.1.0-alpha.1" }
-serge-style = { path = "crates/serge-style", version = "=0.1.0-alpha.1" }
-serge-web-ssr = { path = "crates/serge-web-ssr", version = "=0.1.0-alpha.1" }
-serge-web-dev = { path = "crates/serge-web-dev", version = "=0.1.0-alpha.1" }
-serge-web-dom = { path = "crates/serge-web-dom", version = "=0.1.0-alpha.1" }
+serge-adapter-webview = { path = "crates/serge-adapter-webview", version = "=0.1.0" }
+serge-native-sys = { path = "crates/serge-native-sys", version = "=0.1.0" }
+serge-native-hotpatch = { path = "crates/serge-native-hotpatch", version = "=0.1.0" }
+serge-web-ionic = { path = "crates/serge-web-ionic", version = "=0.1.0" }
+serge-widget-codegen = { path = "crates/serge-widget-codegen", version = "=0.1.0" }
+serge = { path = "crates/serge", version = "=0.1.0" }
+serge-adapter-client = { path = "crates/serge-adapter-client", version = "=0.1.0" }
+serge-core = { path = "crates/serge-core", version = "=0.1.0" }
+serge-macros = { path = "crates/serge-macros", version = "=0.1.0" }
+serge-native = { path = "crates/serge-native", version = "=0.1.0" }
+serge-native-cpu = { path = "crates/serge-native-cpu", version = "=0.1.0" }
+serge-native-gpu = { path = "crates/serge-native-gpu", version = "=0.1.0" }
+serge-native-layout = { path = "crates/serge-native-layout", version = "=0.1.0" }
+serge-native-text = { path = "crates/serge-native-text", version = "=0.1.0" }
+serge-platform-desktop = { path = "crates/serge-platform-desktop", version = "=0.1.0" }
+serge-router = { path = "crates/serge-router", version = "=0.1.0" }
+serge-style = { path = "crates/serge-style", version = "=0.1.0" }
+serge-web-ssr = { path = "crates/serge-web-ssr", version = "=0.1.0" }
+serge-web-dev = { path = "crates/serge-web-dev", version = "=0.1.0" }
+serge-web-dom = { path = "crates/serge-web-dom", version = "=0.1.0" }
 
 # hyve and orbic, unpublished: sibling paths plus the exact prerelease version
 # (`hyperish/docs` `05-development-rules.md` §5).
-hyve = { path = "../hyve/crates/hyve", version = "=0.1.0-alpha.1" }
-orbic = { path = "../orbic/crates/orbic", version = "=0.1.0-alpha.1", default-features = false }
-orbic-auth = { path = "../orbic/crates/orbic-auth", version = "=0.1.0-alpha.1" }
+hyve = { path = "../hyve/crates/hyve", version = "=0.1.0" }
+orbic = { path = "../orbic/crates/orbic", version = "=0.1.0", default-features = false }
+orbic-auth = { path = "../orbic/crates/orbic-auth", version = "=0.1.0" }
 
 # Pinned base crates (`docs/02-architecture.md` §3, §7.8 착수 방식).
 taffy = { version = "=0.15.1", default-features = false, features = ["std", "flexbox", "block_layout"] }
